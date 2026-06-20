@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head><meta charset="UTF-8">
+    <title>Résultats PERT/CPM</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <h1>Résultats du calcul</h1>
+    <p>Durée totale du projet : <strong>{{ duree_totale }} jours</strong></p>
+    <p>Chemin critique : <strong>{{ chemin_critique | join(' → ') }}</strong></p>
+
+    <div id="contenu-export">
+
+        <table border="1" cellpadding="6">
+            <tr>
+                <th>Tâche</th><th>Description</th><th>Durée</th>
+                <th>ES</th><th>EF</th><th>LS</th><th>LF</th>
+                <th>Marge</th><th>Critique ?</th>
+            </tr>
+            {% for nom, r in resultats.items() %}
+            <tr {% if r.critique %}style="background-color:#ffcccc;"{% endif %}>
+                <td>{{ nom }}</td>
+                <td>{{ taches[nom].description }}</td>
+                <td>{{ taches[nom].duree }} j</td>
+                <td>{{ r.ES }}</td>
+                <td>{{ r.EF }}</td>
+                <td>{{ r.LS }}</td>
+                <td>{{ r.LF }}</td>
+                <td>{{ r.marge }}</td>
+                <td>{{ "OUI" if r.critique else "Non" }}</td>
+            </tr>
+            {% endfor %}
+        </table>
+
+        <h2>Graphe PERT</h2>
+        <div id="graphe" style="width: 900px; height: 500px; border: 1px solid #ccc;"></div>
+
+        <h2>Diagramme de Gantt</h2>
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/frappe-gantt@0.6.1/dist/frappe-gantt.css">
+        <div id="gantt-container" style="width: 100%; overflow-x: auto;">
+            <svg id="gantt"></svg>
+        </div>
+
+        <style>
+            .bar-wrapper.critique .bar { fill: #ff6b6b !important; }
+        </style>
+
+    </div>
+
+    <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <script>
+        const nodes = new vis.DataSet({{ nodes | tojson }});
+        const edges = new vis.DataSet({{ edges | tojson }});
+
+        const container = document.getElementById('graphe');
+        const data = { nodes: nodes, edges: edges };
+        const options = {
+            layout: { hierarchical: { direction: "LR", sortMethod: "directed" } },
+            edges: { arrows: "to" },
+            physics: false
+        };
+        new vis.Network(container, data, options);
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/frappe-gantt@0.6.1/dist/frappe-gantt.min.js"></script>
+    <script>
+        const tachesGantt = {{ taches_gantt | tojson }};
+        new Gantt("#gantt", tachesGantt, {
+            view_mode: 'Day'
+        });
+    </script>
+
+    <button onclick="exporterPDF()">📄 Télécharger en PDF</button>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script>
+        async function exporterPDF() {
+            const element = document.getElementById('contenu-export');
+            const canvas = await html2canvas(element, { scale: 2 });
+            const imgData = canvas.toDataURL('image/png');
+
+            const { jsPDF } = window.jspdf;
+            const pdf = new jsPDF('p', 'mm', 'a4');
+
+            const largeurPage = pdf.internal.pageSize.getWidth();
+            const largeurImage = largeurPage - 20;
+            const hauteurImage = (canvas.height * largeurImage) / canvas.width;
+
+            pdf.addImage(imgData, 'PNG', 10, 10, largeurImage, hauteurImage);
+            pdf.save('resultats_pert_cpm.pdf');
+        }
+    </script>
+
+    <button onclick="exporterExcel()">📊 Télécharger en Excel</button>
+
+    <script>
+        const tachesData = {{ taches | tojson }};
+        const resultatsData = {{ resultats | tojson }};
+        const dureeTotale = {{ duree_totale | tojson }};
+        const cheminCritique = {{ chemin_critique | tojson }};
+
+        async function exporterExcel() {
+            const grapheCanvas = await html2canvas(document.getElementById('graphe'), { scale: 2 });
+            const ganttCanvas = await html2canvas(document.getElementById('gantt-container'), { scale: 2 });
+
+            const imageGraphe = grapheCanvas.toDataURL('image/png');
+            const imageGantt = ganttCanvas.toDataURL('image/png');
+
+            const reponse = await fetch('/export_excel', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    taches: tachesData,
+                    resultats: resultatsData,
+                    duree_totale: dureeTotale,
+                    chemin_critique: cheminCritique,
+                    image_graphe: imageGraphe,
+                    image_gantt: imageGantt
+                })
+            });
+
+            const blob = await reponse.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'resultats_pert_cpm.xlsx';
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+        }
+    </script>
+
+</body>
+</html>

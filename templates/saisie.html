@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head><meta charset="UTF-8">
+    <title>Saisie personnalisée - PERT/CPM</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <h1>Saisir vos propres tâches</h1>
+    <p>Format : <code>nom;description;durée;dépendances séparées par des virgules</code></p>
+    <p>Exemple : <code>A;Analyse;3;</code> puis <code>B;Conception;4;A</code></p>
+
+    <form action="/resultats_custom" method="POST">
+        <textarea name="taches" rows="12" cols="60" placeholder="A;Analyse des besoins;3;
+B;Conception BDD;4;A
+C;Maquettes;4;A"></textarea>
+        <br><br>
+        <button type="submit">Calculer</button>
+    </form>
+
+    <p><a href="/">Retour à l'accueil</a></p>
+</body>
+</html>

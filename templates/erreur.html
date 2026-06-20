@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Erreur de saisie - PERT/CPM</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <h1>Des erreurs ont été détectées</h1>
+    <ul>
+        {% for erreur in erreurs %}
+        <li class="alerte">{{ erreur }}</li>
+        {% endfor %}
+    </ul>
+    <p><a href="/saisie">Retour au formulaire</a></p>
+</body>
+</html>
