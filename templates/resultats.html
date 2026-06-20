@@ -5,6 +5,13 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
+
+    <nav class="nav">
+        <a href="/">🏠 Accueil</a>
+        <a href="/demo">📊 Démo (12 tâches)</a>
+        <a href="/saisie">✏️ Saisie personnalisée</a>
+    </nav>
+
     <h1>Résultats du calcul</h1>
     <p>Durée totale du projet : <strong>{{ duree_totale }} jours</strong></p>
     <p>Chemin critique : <strong>{{ chemin_critique | join(' → ') }}</strong></p>

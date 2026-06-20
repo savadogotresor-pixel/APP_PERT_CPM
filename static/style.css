@@ -147,3 +147,22 @@ code {
 ul {
     padding: 0;
 }
+
+/* Barre de navigation */
+.nav {
+    display: flex;
+    gap: 24px;
+    margin-bottom: 24px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.nav a {
+    color: #1e3a8a;
+    font-weight: 600;
+    font-size: 0.95rem;
+}
+
+.nav a:hover {
+    text-decoration: underline;
+}
