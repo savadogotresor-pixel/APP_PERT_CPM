@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head><meta charset="UTF-8">
+    <title>Résultats PERT/CPM</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='resultats.css') }}">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/frappe-gantt@0.6.1/dist/frappe-gantt.css">
+</head>
+<body>
+
+    <nav class="nav">
+        <a href="/">🏠 Accueil</a>
+        <a href="/demo">📊 Démo (12 tâches)</a>
+        <a href="/saisie">✏️ Saisie personnalisée</a>
+    </nav>
+
+    <h1>Résultats du calcul</h1>
+    {% if date_debut %}
+    <p>Date de début : <strong>
+        {{ date_debut.split('-')[2] }}/{{ date_debut.split('-')[1] }}/{{ date_debut.split('-')[0] }}
+    </strong></p>
+    {% endif %}
+    <p>Durée totale du projet : <strong>{{ duree_totale }} jours</strong></p>
+    <p>Chemin critique : <strong>{{ chemin_critique | join(' → ') }}</strong></p>
+
+    <div id="contenu-export">
+
+        <table border="1" cellpadding="6">
+            <tr>
+                <th>Tâche</th><th>Description</th><th>Durée</th>
+                <th>ES</th><th>EF</th><th>LS</th><th>LF</th>
+                <th>Marge</th><th>Critique ?</th>
+            </tr>
+            {% for nom, r in resultats.items() %}
+            <tr {% if r.critique %}class="ligne-critique"{% endif %}>
+                <td>{{ nom }}</td>
+                <td>{{ taches[nom].description }}</td>
+                <td>{{ taches[nom].duree }} j</td>
+                <td>{{ r.ES }}</td>
+                <td>{{ r.EF }}</td>
+                <td>{{ r.LS }}</td>
+                <td>{{ r.LF }}</td>
+                <td>{{ r.marge }}</td>
+                <td>{{ "OUI" if r.critique else "Non" }}</td>
+            </tr>
+            {% endfor %}
+        </table>
+
+        {% if not conseils %}
+        <details class="aide">
+            <summary>ℹ️ Comment sont calculées les dates et la marge (ES, EF, LS, LF) ?</summary>
+            <p>
+                Le calcul se fait en deux passes successives sur l'ensemble des tâches :
+            </p>
+            <ul>
+                <li><strong>ES</strong> (début au plus tôt) : la date la plus tôt à laquelle la tâche
+                    peut commencer. C'est le maximum des <strong>EF</strong> de toutes ses tâches
+                    précédentes (0 si elle n'a pas de prédécesseur).</li>
+                <li><strong>EF</strong> (fin au plus tôt) : <code>EF = ES + durée</code>.</li>
+                <li><strong>LF</strong> (fin au plus tard) : la date la plus tardive à laquelle la tâche
+                    peut se terminer sans retarder la fin du projet. C'est le minimum des
+                    <strong>LS</strong> de toutes ses tâches suivantes (égal à la durée totale du
+                    projet si elle n'a pas de successeur).</li>
+                <li><strong>LS</strong> (début au plus tard) : <code>LS = LF − durée</code>.</li>
+            </ul>
+            <p>
+                La première passe (ES, EF) se calcule en partant du début du projet et en avançant
+                tâche par tâche (passe avant). La seconde (LS, LF) se calcule en partant de la fin du
+                projet et en revenant en arrière (passe arrière).
+            </p>
+            <p>
+                La <strong>marge</strong> (ou flottement) d'une tâche est le retard qu'elle peut
+                supporter sans décaler la fin du projet : <code>marge = LS − ES = LF − EF</code>.
+            </p>
+            <p>
+                Une tâche est dite <strong>critique</strong> lorsque sa marge est égale à
+                <strong>0</strong> : elle ne dispose d'aucune latitude, le moindre retard sur cette
+                tâche retarde directement la fin du projet (lignes surlignées en rouge dans le
+                tableau). Le <strong>chemin critique</strong> est la suite continue de tâches
+                critiques qui relie le début à la fin du projet ; sa durée totale correspond à la
+                durée minimale du projet.
+            </p>
+        </details>
+        {% endif %}
+
+        {% if conseils %}
+        <div class="conseils">
+            <h2>💡 Conseils d'optimisation</h2>
+            {% for c in conseils %}
+            <p class="conseil conseil-{{ c.type }}">{{ c.texte }}</p>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <h2>Graphe PERT</h2>
+        {% if not conseils %}
+        <details class="aide">
+            <summary>ℹ️ Comment lire ce graphe ?</summary>
+            <p>
+                Chaque <strong>nœud</strong> représente une tâche (avec sa durée), et chaque
+                <strong>flèche</strong> représente une dépendance : la tâche de départ doit être
+                terminée avant que la tâche d'arrivée puisse commencer. Le graphe est disposé
+                automatiquement de gauche à droite selon l'ordre des dépendances. Les tâches qui font
+                partie du <strong>chemin critique</strong> sont colorées en rouge, les autres en bleu.
+            </p>
+        </details>
+        {% endif %}
+        <div id="graphe"></div>
+
+        <h2>Diagramme de Gantt</h2>
+        {% if not conseils %}
+        <details class="aide">
+            <summary>ℹ️ Comment ce diagramme a-t-il été construit ?</summary>
+            <p>
+                Le diagramme est généré avec la librairie <strong>Frappe Gantt</strong>. Chaque barre
+                correspond à une tâche, positionnée entre sa date de début et sa date de fin : on
+                utilise la date de début du projet que vous avez indiquée (ou la date du jour par
+                défaut pour la démo) à laquelle on ajoute les valeurs <strong>ES</strong> et
+                <strong>EF</strong> calculées précédemment pour obtenir les vraies dates de début et de
+                fin de chaque tâche. Les barres des tâches du chemin critique sont mises en évidence
+                en rouge pour les repérer immédiatement. Vous pouvez cliquer sur une barre pour
+                afficher le détail de ses dates.
+            </p>
+        </details>
+        {% endif %}
+        <div id="gantt-container">
+            <svg id="gantt"></svg>
+        </div>
+
+    </div>
+
+    <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <script>
+        const nodes = new vis.DataSet({{ nodes | tojson }});
+        const edges = new vis.DataSet({{ edges | tojson }});
+
+        const container = document.getElementById('graphe');
+        const data = { nodes: nodes, edges: edges };
+        const options = {
+            layout: { hierarchical: { direction: "LR", sortMethod: "directed" } },
+            edges: { arrows: "to" },
+            physics: false
+        };
+        new vis.Network(container, data, options);
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/frappe-gantt@0.6.1/dist/frappe-gantt.min.js"></script>
+    <script>
+        const tachesGantt = {{ taches_gantt | tojson }};
+        new Gantt("#gantt", tachesGantt, {
+            view_mode: 'Day',
+            date_format: 'YYYY-MM-DD',
+            language: 'fr',
+            column_width: 40,
+            bar_height: 20,
+            padding: 18,
+            custom_popup_html: function(task) {
+                const debut = new Date(task.start);
+                const fin = new Date(task.end);
+                const fmt = d => `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
+                return `<div class="details-container">
+                    <p><strong>${task.name}</strong></p>
+                    <p>Début : ${fmt(debut)}</p>
+                    <p>Fin : ${fmt(fin)}</p>
+                </div>`;
+            }
+        });
+    </script>
+
+    <button onclick="exporterPDF()">📄 Télécharger en PDF</button>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script>
+        async function exporterPDF() {
+            const element = document.getElementById('contenu-export');
+            const canvas = await html2canvas(element, {
+                scale: 2,
+                useCORS: true,
+                allowTaint: true,
+                scrollX: 0,
+                scrollY: -window.scrollY,
+                windowWidth: document.documentElement.scrollWidth,
+                windowHeight: document.documentElement.scrollHeight
+            });
+            const imgData = canvas.toDataURL('image/png');
+
+            const { jsPDF } = window.jspdf;
+            const pdf = new jsPDF('p', 'mm', 'a4');
+
+            const largeurPage = pdf.internal.pageSize.getWidth();   // 210 mm
+            const hauteurPage = pdf.internal.pageSize.getHeight();  // 297 mm
+            const marge = 10;
+            const largeurImage = largeurPage - marge * 2;
+            const hauteurImage = (canvas.height * largeurImage) / canvas.width;
+
+            let positionY = marge;
+            let hauteurRestante = hauteurImage;
+
+            while (hauteurRestante > 0) {
+                pdf.addImage(imgData, 'PNG', marge, positionY, largeurImage, hauteurImage);
+                hauteurRestante -= (hauteurPage - marge * 2);
+                if (hauteurRestante > 0) {
+                    pdf.addPage();
+                    positionY = marge - (hauteurImage - hauteurRestante);
+                }
+            }
+
+            pdf.save('resultats_pert_cpm.pdf');
+        }
+    </script>
+
+    <button onclick="exporterExcel()">📊 Télécharger en Excel</button>
+
+    <script>
+        const tachesData = {{ taches | tojson }};
+        const resultatsData = {{ resultats | tojson }};
+        const dureeTotale = {{ duree_totale | tojson }};
+        const cheminCritique = {{ chemin_critique | tojson }};
+
+        async function exporterExcel() {
+            const grapheCanvas = await html2canvas(document.getElementById('graphe'), { scale: 2 });
+            const ganttCanvas = await html2canvas(document.getElementById('gantt-container'), { scale: 2 });
+
+            const imageGraphe = grapheCanvas.toDataURL('image/png');
+            const imageGantt = ganttCanvas.toDataURL('image/png');
+
+            const reponse = await fetch('/export_excel', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    taches: tachesData,
+                    resultats: resultatsData,
+                    duree_totale: dureeTotale,
+                    chemin_critique: cheminCritique,
+                    image_graphe: imageGraphe,
+                    image_gantt: imageGantt
+                })
+            });
+
+            const blob = await reponse.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'resultats_pert_cpm.xlsx';
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+        }
+    </script>
+
+</body>
+</html>

@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head><meta charset="UTF-8">
+    <title>PERT/CPM - Groupe 3</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='accueil.css') }}">
+</head>
+<body>
+    <nav class="nav">
+        <a href="/">🏠 Accueil</a>
+        <a href="/demo">📊 Démo (12 tâches)</a>
+        <a href="/saisie">✏️ Saisie personnalisée</a>
+    </nav>
+
+    <div class="welcome-box">
+        <h1>🚀 PERT/CPM : pilotez vos projets avec précision</h1>
+        <p class="subtitle">De la liste de tâches au chemin critique, en quelques clics</p>
+
+        <p>
+            Cette application combine deux méthodes complémentaires de gestion de projet :
+            le <strong>PERT</strong> pour modéliser l'enchaînement des tâches, et le
+            <strong>CPM</strong> pour déterminer la durée minimale du projet et son chemin critique.
+        </p>
+
+        <div class="steps">
+            <div class="step">
+                <span class="step-num">1</span>
+                <div>
+                    <h3>Décrivez vos tâches</h3>
+                    <p>Durées, dépendances et dates de votre projet.</p>
+                </div>
+            </div>
+            <div class="step">
+                <span class="step-num">2</span>
+                <div>
+                    <h3>Lancez le calcul</h3>
+                    <p>Dates au plus tôt/tard et marges sont déterminées automatiquement.</p>
+                </div>
+            </div>
+            <div class="step">
+                <span class="step-num">3</span>
+                <div>
+                    <h3>Visualisez le résultat</h3>
+                    <p>Chemin critique mis en évidence sur le Gantt et le graphe PERT.</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="actions">
+            <a href="/demo" class="btn btn-primary">📊 Découvrir la démo (12 tâches)</a>
+            <a href="/saisie" class="btn btn-secondary">✏️ Démarrer mon propre projet</a>
+        </div>
+
+        <p class="group-info">
+            Projet académique — Licence 3 MSCS · UVBF &nbsp;|&nbsp; <strong>Groupe 3</strong> :
+            SAVADOGO Ahmed Hussen Ramadan Trésor 2ème Jumeau, KONFE Wendmanegda Jeanne Esther, GUIRA Oumarou, NAKOULMA Yamba
+        </p>
+    </div>
+</body>
+</html>

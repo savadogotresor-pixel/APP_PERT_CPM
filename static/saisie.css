@@ -1,0 +1,12 @@
+/* ===== Page de saisie ===== */
+
+.champ-date {
+    padding: 8px;
+    border-radius: 6px;
+    border: 1px solid #d1d5db;
+    margin: 8px 0 16px;
+}
+
+.champ-date.erreur {
+    border-color: #ff6b6b;
+}

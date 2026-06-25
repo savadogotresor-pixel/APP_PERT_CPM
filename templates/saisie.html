@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Saisie personnalisée - PERT/CPM</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='saisie.css') }}">
+</head>
+<body>
+    <nav class="nav">
+        <a href="/">🏠 Accueil</a>
+        <a href="/demo">📊 Démo (12 tâches)</a>
+        <a href="/saisie">✏️ Saisie personnalisée</a>
+    </nav>
+
+    <h1>Saisir vos propres tâches</h1>
+    <p>Format : <code>nom;description;durée;dépendances séparées par des virgules</code></p>
+    <p>Exemple : <code>A;Analyse;3;</code> puis <code>B;Conception;4;A</code></p>
+
+    <form action="/resultats_custom" method="POST" id="form-saisie">
+        <label>Date de début du projet :</label><br>
+        <input type="text" id="date_debut_affichage" placeholder="JJ/MM/AAAA"
+               class="champ-date"
+               oninput="convertirDate(this, 'date_debut_iso')">
+        <input type="hidden" name="date_debut" id="date_debut_iso"><br>
+
+        <label>Date de fin souhaitée <em>(optionnel — pour optimiser le planning)</em> :</label><br>
+        <input type="text" id="date_fin_affichage" placeholder="JJ/MM/AAAA"
+               class="champ-date"
+               oninput="convertirDate(this, 'date_fin_iso')">
+        <input type="hidden" name="date_fin_cible" id="date_fin_iso"><br>
+
+        <label>Tâches :</label><br>
+        <textarea name="taches" rows="12" cols="60"
+            placeholder="A;Analyse des besoins;3;
+B;Conception BDD;4;A
+C;Maquettes;4;A"></textarea>
+        <br><br>
+        <button type="submit">Calculer</button>
+    </form>
+
+    <script>
+    function convertirDate(input, idCible) {
+        const val = input.value.trim();
+        const cible = document.getElementById(idCible);
+        if (/^\d{2}\/\d{2}\/\d{4}$/.test(val)) {
+            const [jour, mois, annee] = val.split('/');
+            cible.value = `${annee}-${mois}-${jour}`;
+            input.classList.remove('erreur');
+        } else {
+            cible.value = '';
+            if (val.length > 0) input.classList.add('erreur');
+        }
+    }
+
+    document.getElementById('form-saisie').addEventListener('submit', function(e) {
+        // Forcer la conversion au moment du submit (au cas où oninput n'a pas suffi)
+        const champDebut = document.getElementById('date_debut_affichage');
+        const champFin = document.getElementById('date_fin_affichage');
+        convertirDate(champDebut, 'date_debut_iso');
+        convertirDate(champFin, 'date_fin_iso');
+
+        const debutIso = document.getElementById('date_debut_iso').value;
+        if (!debutIso) {
+            e.preventDefault();
+            alert('Veuillez saisir une date de début valide au format JJ/MM/AAAA.');
+        }
+    });
+    </script>
+</body>
+</html>

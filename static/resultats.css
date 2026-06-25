@@ -1,0 +1,111 @@
+/* ===== Page de résultats ===== */
+
+#graphe {
+    width: 900px;
+    height: 500px;
+    border: 1px solid #ccc;
+}
+
+#gantt-container {
+    width: 100%;
+    overflow-x: auto;
+}
+
+/* Ligne du tableau correspondant à une tâche du chemin critique */
+.ligne-critique {
+    background-color: #ffcccc;
+}
+
+/* Barres du diagramme de Gantt correspondant au chemin critique */
+.bar-wrapper.critique .bar {
+    fill: #ff6b6b !important;
+}
+
+/* Blocs d'aide / explications repliables */
+.aide {
+    background: #eff6ff;
+    border-left: 4px solid #2563eb;
+    border-radius: 6px;
+    padding: 4px 16px 4px;
+    margin: 14px 0 22px;
+}
+
+.aide summary {
+    cursor: pointer;
+    font-weight: 600;
+    color: #1e3a8a;
+    padding: 10px 0;
+    list-style: none;
+}
+
+.aide summary::-webkit-details-marker {
+    display: none;
+}
+
+.aide summary::before {
+    content: '▸ ';
+    color: #2563eb;
+}
+
+.aide[open] summary::before {
+    content: '▾ ';
+}
+
+.aide p, .aide ul {
+    font-size: 0.88rem;
+    color: #374151;
+}
+
+.aide ul {
+    margin: 8px 0;
+    padding-left: 22px;
+}
+
+.aide li {
+    margin-bottom: 6px;
+}
+
+/* Conseils d'optimisation (saisie personnalisée) */
+.conseils {
+    margin: 22px 0 28px;
+}
+
+.conseil {
+    background: #f9fafb;
+    border-left: 4px solid #9ca3af;
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin-bottom: 10px;
+    font-size: 0.92rem;
+    color: #374151;
+}
+
+.conseil-critique {
+    border-left-color: #ef4444;
+    background: #fef2f2;
+}
+
+.conseil-attention {
+    border-left-color: #f59e0b;
+    background: #fffbeb;
+}
+
+.conseil-flexible {
+    border-left-color: #10b981;
+    background: #f0fdf4;
+}
+
+.conseil-delai_retard {
+    border-left-color: #ef4444;
+    background: #fef2f2;
+}
+
+.conseil-delai_ok {
+    border-left-color: #10b981;
+    background: #f0fdf4;
+}
+
+.conseil-global {
+    border-left-color: #2563eb;
+    background: #eff6ff;
+}
