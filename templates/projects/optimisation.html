@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Simulation d'optimisation — {{ projet.name }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        .mp-page { max-width: 1100px; }
+        .mp-form { background: #fff; padding: 24px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+        .mp-champ { margin-bottom: 16px; }
+        .mp-champ label { display: block; font-weight: 600; margin-bottom: 6px; color: #374151; }
+        .mp-champ input[type="text"] { width: 100%; max-width: 420px; padding: 9px 11px; border: 1px solid #d1d5db; border-radius: 6px; font: inherit; font-size: .95rem; }
+        .mp-champ input[type="number"] { width: 96px; padding: 7px 9px; border: 1px solid #d1d5db; border-radius: 6px; font: inherit; font-size: .9rem; }
+        .mp-aide { font-size: .82rem; color: #6b7280; margin-top: 5px; line-height: 1.5; }
+        .mp-btn { display: inline-block; background: #2563eb; color: #fff; padding: 10px 18px; border-radius: 6px; font-size: .9rem; font-weight: 600; text-decoration: none; border: 0; cursor: pointer; margin: 8px 8px 0 0; }
+        .mp-btn:hover { background: #1d4ed8; color: #fff; text-decoration: none; }
+        .mp-btn-secondary { background: #e5e7eb; color: #1f2937; }
+        .mp-btn-secondary:hover { background: #d1d5db; color: #111827; }
+        .mp-table { width: 100%; border-collapse: collapse; font-size: .84rem; margin: 10px 0 18px; }
+        .mp-table th, .mp-table td { border: 1px solid #e5e7eb; padding: 7px 9px; text-align: left; vertical-align: top; }
+        .mp-table th { background: #f3f4f6; color: #374151; }
+        .mp-table td ul { margin: 0; padding-left: 18px; }
+        .mp-bandeau { background: #fffbeb; border: 2px solid #f59e0b; border-left: 6px solid #d97706; color: #92400e; padding: 14px 18px; border-radius: 8px; margin: 16px 0 22px; font-weight: 700; font-size: 1rem; }
+        .mp-encadre { background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 14px 18px; margin: 14px 0; }
+        .mp-encadre h3 { margin: 0 0 8px; font-size: 1rem; color: #1e3a8a; }
+        .mp-encadre ul { margin: 0; padding-left: 20px; }
+        .mp-vide { background: #f9fafb; padding: 20px; border-radius: 6px; color: #6b7280; }
+        .mp-alerte { background: #fef2f2; border-left: 4px solid #dc2626; color: #991b1b; padding: 12px 16px; border-radius: 6px; margin: 12px 0; }
+        .mp-flash { padding: 10px 14px; border-radius: 6px; margin-bottom: 10px; font-size: .9rem; }
+        .mp-flash-success { background: #dcfce7; color: #166534; }
+        .mp-flash-error { background: #fee2e2; color: #991b1b; }
+        .mp-nav { justify-content: flex-end; }
+        .mp-meta { color: #6b7280; font-size: .9rem; }
+        .mp-code { font-family: monospace; background: #e5e7eb; padding: 1px 5px; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    {% macro liste_chemins(chemins) %}
+        {% if chemins %}
+        <ul>
+            {% for chemin in chemins %}
+            <li>{{ chemin if chemin is string else chemin|join(' → ') }}</li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <span class="mp-meta">Aucun</span>
+        {% endif %}
+    {% endmacro %}
+
+    {% macro bloc_valeurs(valeur) %}
+        {% if valeur is mapping %}
+        <ul>
+            {% for cle, contenu in valeur.items() %}
+            <li><strong>{{ cle }}</strong> : {{ contenu }}</li>
+            {% endfor %}
+        </ul>
+        {% elif valeur is sequence and valeur is not string %}
+        <ul>
+            {% for element in valeur %}
+            <li>{{ element }}</li>
+            {% endfor %}
+        </ul>
+        {% elif valeur %}
+        <p>{{ valeur }}</p>
+        {% else %}
+        <p class="mp-meta">Aucune information fournie.</p>
+        {% endif %}
+    {% endmacro %}
+
+    {% macro ligne_modification(code, info) %}
+        {% set d_init = info.get('avant', info.get('duree_initiale', info.get('duree_avant', info.get('duree_originale', '—')))) if info is mapping else '—' %}
+        {% set d_sim = info.get('apres', info.get('duree_simulee', info.get('duree_apres', info.get('nouvelle_duree', '—')))) if info is mapping else '—' %}
+        {% set gain = info.get('reduction', info.get('gain', info.get('gains', d_init - d_sim if d_init is number and d_sim is number else '—'))) if info is mapping else info %}
+        {% set m_init = info.get('marge_initiale', info.get('marge_avant', '—')) if info is mapping else '—' %}
+        {% set m_sim = info.get('marge_simulee', info.get('marge_apres', '—')) if info is mapping else '—' %}
+        <tr>
+            <td><strong>{{ code }}</strong></td>
+            <td>{{ d_init }}</td>
+            <td>{{ d_sim }}</td>
+            <td>{{ gain }}</td>
+            <td>{{ m_init }}</td>
+            <td>{{ m_sim }}</td>
+        </tr>
+    {% endmacro %}
+
+    {% macro ligne_accelerable(code, info) %}
+        {% set reduction = info.get('reduction_max', info.get('reduction_possible', info.get('reduction', '—'))) if info is mapping else '—' %}
+        <tr>
+            <td><strong>{{ code }}</strong></td>
+            <td>{{ info.get('description', '—') if info is mapping else '—' }}</td>
+            <td>{{ info.get('duree', info.get('duree_actuelle', '—')) if info is mapping else '—' }}</td>
+            <td>{{ info.get('marge_totale', info.get('marge', '—')) if info is mapping else '—' }}</td>
+            <td>{{ reduction }}</td>
+        </tr>
+    {% endmacro %}
+
+    <nav class="nav mp-nav">
+        <a href="{{ accueil_url }}">Accueil</a>
+        <a href="{{ url_for('projects.list_projects') }}">Mes projets</a>
+        <a href="{{ url_for('projects.detail', project_id=projet.id) }}">{{ projet.name }}</a>
+        {% if current_user.is_authenticated %}
+        <a href="{{ deconnexion_url }}">Déconnexion</a>
+        {% endif %}
+    </nav>
+
+    <main class="mp-page">
+        <h1>⚡ Simulation d'optimisation</h1>
+        <p class="mp-aide">Projet : <strong>{{ projet.name }}</strong></p>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for categorie, message in messages %}
+                <div class="mp-flash mp-flash-{{ categorie }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <div class="mp-bandeau">
+            Le planning de référence n'est pas modifié : cette simulation est contemplative.
+        </div>
+
+        {% if not taches_critiques %}
+        <div class="mp-alerte">
+            Aucune tâche critique de durée positive n'est disponible : ajoutez des tâches
+            et vérifiez le calcul PERT/CPM du projet avant de simuler une optimisation.
+        </div>
+        {% endif %}
+
+        <form class="mp-form" method="post"
+              action="{{ url_for('projects.optimisation', project_id=projet.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+            <div class="mp-champ">
+                <label for="nom_scenario">Nom du scénario (facultatif)</label>
+                <input id="nom_scenario" name="nom_scenario" type="text"
+                       value="{{ nom_scenario }}" placeholder="Ex. : Compression du chemin critique">
+                <p class="mp-aide">
+                    Renseignez un nom pour enregistrer la simulation dans l'historique du projet.
+                    Sans nom, la simulation est affichée mais n'est pas conservée.
+                </p>
+            </div>
+
+            <h2>Durées à simuler</h2>
+            <p class="mp-aide">
+                Seules les tâches critiques sont proposées. Saisissez la durée souhaitée
+                (en jours) : laissez la valeur actuelle pour ne rien modifier.
+            </p>
+
+            {% if taches_critiques %}
+            <table class="mp-table">
+                <thead>
+                    <tr>
+                        <th>Tâche</th><th>Description</th>
+                        <th>Durée actuelle</th><th>Durée simulée (jours)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for code in taches_critiques %}
+                    <tr>
+                        <td><strong>{{ code }}</strong></td>
+                        <td>{{ taches.get(code, {}).get('description', '') or '—' }}</td>
+                        <td>{{ taches.get(code, {}).get('duree', 0) }} j</td>
+                        <td>
+                            <label class="mp-meta" for="duree_{{ code }}" style="display:none">Durée simulée pour {{ code }}</label>
+                            <input id="duree_{{ code }}" name="duree_{{ code }}" type="number"
+                                   min="0" step="1" inputmode="numeric"
+                                   value="{{ durees_formulaire.get(code, taches.get(code, {}).get('duree', 0)) }}">
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="mp-vide">Aucune durée à simuler.</div>
+            {% endif %}
+
+            <button class="mp-btn" type="submit" {% if not taches_critiques %}disabled{% endif %}>
+                Lancer la simulation
+            </button>
+            <a class="mp-btn mp-btn-secondary"
+               href="{{ url_for('projects.detail', project_id=projet.id) }}">Retour au planning</a>
+        </form>
+
+        {% if resultat %}
+            {% set initial = resultat.get('initial') or {} %}
+            {% set simule = resultat.get('simule') or {} %}
+
+            <h2>Comparaison initial / simulé</h2>
+            <table class="mp-table">
+                <thead>
+                    <tr><th>Indicateur</th><th>Initial</th><th>Simulé</th></tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Durée totale</td>
+                        <td>{{ initial.get('duree_totale', '—') }} jour(s)</td>
+                        <td>{{ simule.get('duree_totale', '—') }} jour(s)</td>
+                    </tr>
+                    <tr>
+                        <td>Chemin(s) critique(s)</td>
+                        <td>{{ liste_chemins(initial.get('chemins_critiques')) }}</td>
+                        <td>{{ liste_chemins(simule.get('chemins_critiques')) }}</td>
+                    </tr>
+                    {% if initial.get('resultats') or simule.get('resultats') %}
+                    {% set ri = initial.get('resultats') or [] %}
+                    {% set rs = simule.get('resultats') or [] %}
+                    {% if ri is mapping %}
+                        {% set nb_critiques_init = ri.values()|selectattr('critique')|list|length %}
+                    {% else %}
+                        {% set nb_critiques_init = ri|selectattr('critique')|list|length %}
+                    {% endif %}
+                    {% if rs is mapping %}
+                        {% set nb_critiques_sim = rs.values()|selectattr('critique')|list|length %}
+                    {% else %}
+                        {% set nb_critiques_sim = rs|selectattr('critique')|list|length %}
+                    {% endif %}
+                    <tr>
+                        <td>Tâches critiques</td>
+                        <td>{{ nb_critiques_init }}</td>
+                        <td>{{ nb_critiques_sim }}</td>
+                    </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+
+            {% set gains = resultat.get('gains') %}
+            <div class="mp-encadre">
+                <h3>Gains</h3>
+                {% if gains is number %}
+                <p><strong>{{ gains }}</strong> jour(s) gagné(s) sur la durée totale.</p>
+                {% else %}
+                {{ bloc_valeurs(gains) }}
+                {% endif %}
+            </div>
+
+            <h2>Modifications simulées</h2>
+            {% set modifications = resultat.get('modifications') %}
+            {% if modifications %}
+            <table class="mp-table">
+                <thead>
+                    <tr>
+                        <th>Tâche</th><th>Durée initiale</th><th>Durée simulée</th>
+                        <th>Réduction</th><th>Marge initiale</th><th>Marge simulée</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% if modifications is mapping %}
+                        {% for code, info in modifications.items() %}
+                        {{ ligne_modification(code, info) }}
+                        {% endfor %}
+                    {% else %}
+                        {% for info in modifications %}
+                            {% if info is mapping %}
+                            {{ ligne_modification(info.get('code', info.get('tache', '—')), info) }}
+                            {% else %}
+                            {{ ligne_modification('—', info) }}
+                            {% endif %}
+                        {% endfor %}
+                    {% endif %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="mp-vide">Aucune modification à afficher.</div>
+            {% endif %}
+
+            <h2>Tâches accélérables</h2>
+            {% set accelerables = resultat.get('taches_accelerables') %}
+            {% if accelerables %}
+            <table class="mp-table">
+                <thead>
+                    <tr>
+                        <th>Tâche</th><th>Description</th><th>Durée</th>
+                        <th>Marge</th><th>Réduction possible</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% if accelerables is mapping %}
+                        {% for code, info in accelerables.items() %}
+                        {{ ligne_accelerable(code, info) }}
+                        {% endfor %}
+                    {% else %}
+                        {% for info in accelerables %}
+                            {% if info is mapping %}
+                            {{ ligne_accelerable(info.get('code', info.get('tache', '—')), info) }}
+                            {% else %}
+                            {{ ligne_accelerable(info, {}) }}
+                            {% endif %}
+                        {% endfor %}
+                    {% endif %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="mp-vide">Aucune tâche accélérable identifiée.</div>
+            {% endif %}
+
+            <div class="mp-encadre">
+                <h3>Hypothèses</h3>
+                {{ bloc_valeurs(resultat.get('hypotheses')) }}
+            </div>
+
+            <div class="mp-encadre">
+                <h3>Limites</h3>
+                {{ bloc_valeurs(resultat.get('limites')) }}
+            </div>
+        {% endif %}
+
+        <h2>Scénarios enregistrés</h2>
+        {% if scenarios_affiches %}
+        <table class="mp-table">
+            <thead>
+                <tr><th>Nom</th><th>Créé le</th><th>Hypothèses</th><th>Résultats</th></tr>
+            </thead>
+            <tbody>
+                {% for scenario in scenarios_affiches %}
+                <tr>
+                    <td><strong>{{ scenario.nom }}</strong></td>
+                    <td>{{ scenario.date_creation or '—' }}</td>
+                    <td>
+                        {% if scenario.reductions %}
+                            {% for code, duree in scenario.reductions.items() %}
+                            {{ code }} : {{ duree }} j{% if not loop.last %}, {% endif %}
+                            {% endfor %}
+                        {% else %}
+                            <span class="mp-meta">Aucune réduction</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {{ scenario.duree_initiale if scenario.duree_initiale is not none else '—' }} →
+                        {{ scenario.duree_simulee if scenario.duree_simulee is not none else '—' }} jour(s)
+                        {% if scenario.gains %}
+                        <br><span class="mp-meta">Gains : {{ scenario.gains }}</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="mp-vide">Aucun scénario enregistré pour ce projet.</div>
+        {% endif %}
+    </main>
+</body>
+</html>

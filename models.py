@@ -153,6 +153,21 @@ class AuditLog(db.Model):
     user = db.relationship('User', backref='audit_logs')
 
 
+class Scenario(db.Model):
+    """Hypothèses et résultats d'une simulation PERT/CPM non appliquée."""
+
+    __tablename__ = 'scenario'
+
+    id = db.Column(db.Integer, primary_key=True)
+    project_id = db.Column(db.Integer, db.ForeignKey('project.id'),
+                           nullable=False, index=True)
+    nom = db.Column(db.String(120), nullable=False)
+    hypotheses = db.Column(db.Text, nullable=False, default='{}')
+    resultats = db.Column(db.Text, nullable=False, default='{}')
+    date_creation = db.Column(db.DateTime, server_default=db.func.now())
+    projet = db.relationship('Project', backref='scenarios')
+
+
 def project_to_taches(project):
     """Convertit les tâches d'un projet au format attendu par le moteur PERT.
 

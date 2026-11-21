@@ -9,6 +9,7 @@ prédécesseurs) sont enregistrées.
 
 from __future__ import annotations
 
+import json
 from copy import deepcopy
 from datetime import date, datetime, timedelta
 from io import BytesIO
@@ -39,6 +40,20 @@ from models import (
     user_can_access,
 )
 from services.import_export import exporter_csv, exporter_xlsx, importer_fichier
+
+# Le modèle ``Scenario`` et le service d'optimisation sont fournis par un autre
+# module du chantier. Les imports tolérants permettent de charger ce blueprint
+# même si ce travail parallèle n'est pas encore terminé ; les helpers ci-dessous
+# retentent l'import au moment où la route est utilisée.
+try:
+    from models import Scenario
+except ImportError:  # pragma: no cover - dépend de l'avancement du chantier
+    Scenario = None
+
+try:
+    from services.optimisation import simuler
+except ImportError:  # pragma: no cover - dépend de l'avancement du chantier
+    simuler = None
 
 try:  # Werkzeug >= 2.1
     from werkzeug.routing.exceptions import BuildError
@@ -116,6 +131,67 @@ def _journal(action, details):
 def _messages_erreur(exception):
     """Découpe les messages agrégés par ``ValidationError`` en lignes propres."""
     return [ligne.strip() for ligne in str(exception).split('\n') if ligne.strip()]
+
+
+def _simulateur():
+    """Retourne ``simuler`` (import différé si le service arrive plus tard)."""
+    global simuler
+    if simuler is None:
+        from services.optimisation import simuler as fonction_simuler
+
+        simuler = fonction_simuler
+    return simuler
+
+
+def _modele_scenario():
+    """Retourne le modèle ``Scenario`` dès qu'il est disponible."""
+    global Scenario
+    if Scenario is None:
+        try:
+            from models import Scenario as modele_scenario
+        except ImportError:
+            return None
+        Scenario = modele_scenario
+    return Scenario
+
+
+def _scenarios_enregistres(projet):
+    """Scénarios d'un projet, du plus récent au plus ancien."""
+    modele = _modele_scenario()
+    if modele is None:
+        return []
+    try:
+        return (
+            modele.query.filter_by(project_id=projet.id)
+            .order_by(modele.date_creation.desc())
+            .all()
+        )
+    except Exception:  # table pas encore migrée : la page reste consultable
+        db.session.rollback()
+        return []
+
+
+def _details_scenario(scenario):
+    """Aplatit un scénario pour l'affichage (JSON déjà décodé côté serveur)."""
+    def charger(valeur):
+        if not valeur:
+            return {}
+        try:
+            donnees = json.loads(valeur)
+        except (TypeError, ValueError):
+            return {}
+        return donnees if isinstance(donnees, dict) else {}
+
+    hypotheses = charger(getattr(scenario, 'hypotheses', None))
+    resultats = charger(getattr(scenario, 'resultats', None))
+    return {
+        'nom': getattr(scenario, 'nom', ''),
+        'date_creation': getattr(scenario, 'date_creation', None),
+        'reductions': hypotheses.get('reductions') or {},
+        'duree_initiale': resultats.get('duree_initiale'),
+        'duree_simulee': resultats.get('duree_simulee'),
+        'gains': resultats.get('gains'),
+    }
 
 
 def _nom_export(projet, extension):
@@ -551,6 +627,140 @@ def detail(project_id):
         erreur_calcul=erreur_calcul,
         nb_critiques=nb_critiques,
         date_fin_estimee=fin_estimee,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Routes — optimisation (simulation contemplative)
+# ---------------------------------------------------------------------------
+
+@projects_bp.route('/<int:project_id>/optimisation', methods=['GET', 'POST'])
+@login_required
+def optimisation(project_id):
+    """Simule des réductions de durée sans jamais modifier le planning source."""
+    projet = _projet_ou_404(project_id)
+    taches = project_to_taches(projet)
+
+    try:
+        planning = compute(taches) if taches else None
+    except ValidationError as exc:
+        for erreur in _messages_erreur(exc):
+            flash(erreur, 'error')
+        planning = None
+
+    resultats_initiaux = planning.resultats if planning is not None else {}
+    taches_critiques = [
+        code for code in sorted(taches)
+        if resultats_initiaux.get(code, {}).get('critique')
+        and taches[code].get('duree', 0) > 0
+    ]
+    durees_formulaire = {
+        code: str(taches[code].get('duree', 0)) for code in taches_critiques
+    }
+    nom_scenario = ''
+    resultat_simulation = None
+
+    if request.method == 'POST':
+        nom_scenario = (request.form.get('nom_scenario') or '').strip()
+        erreurs_saisie = []
+        reductions = {}
+
+        for code in taches_critiques:
+            valeur_brute = (request.form.get(f'duree_{code}') or '').strip()
+            durees_formulaire[code] = valeur_brute
+            if not valeur_brute:
+                continue
+            try:
+                nouvelle_duree = int(valeur_brute)
+            except ValueError:
+                erreurs_saisie.append(
+                    f"La durée simulée de la tâche « {code} » doit être un entier."
+                )
+                continue
+            if nouvelle_duree < 0:
+                erreurs_saisie.append(
+                    f"La durée simulée de la tâche « {code} » ne peut pas être négative."
+                )
+                continue
+            if nouvelle_duree != taches[code].get('duree', 0):
+                reductions[code] = nouvelle_duree
+
+        for erreur in erreurs_saisie:
+            flash(erreur, 'error')
+
+        if not erreurs_saisie:
+            if not reductions:
+                flash(
+                    "Aucune durée n'a été modifiée : saisissez une durée simulée "
+                    "différente de la durée actuelle.",
+                    'error',
+                )
+            else:
+                try:
+                    resultat_simulation = _simulateur()(deepcopy(taches), reductions)
+                except ImportError:
+                    flash("Le service d'optimisation n'est pas disponible.", 'error')
+                except ValueError as exc:
+                    for erreur in _messages_erreur(exc):
+                        flash(erreur, 'error')
+                else:
+                    flash('Simulation terminée. Le planning de référence est inchangé.', 'success')
+
+                    if nom_scenario:
+                        modele = _modele_scenario()
+                        if modele is None:
+                            flash(
+                                "Le scénario n'a pas pu être enregistré : modèle indisponible.",
+                                'error',
+                            )
+                        else:
+                            initial = resultat_simulation.get('initial') or {}
+                            simule = resultat_simulation.get('simule') or {}
+                            scenario = modele(
+                                project_id=projet.id,
+                                nom=nom_scenario,
+                                hypotheses=json.dumps(
+                                    {'reductions': reductions}, ensure_ascii=False
+                                ),
+                                resultats=json.dumps(
+                                    {
+                                        'duree_initiale': initial.get('duree_totale'),
+                                        'duree_simulee': simule.get('duree_totale'),
+                                        'gains': resultat_simulation.get('gains'),
+                                    },
+                                    ensure_ascii=False,
+                                ),
+                            )
+                            db.session.add(scenario)
+                            _journal(
+                                'SCENARIO_ENREGISTRE',
+                                f"Scénario « {nom_scenario} » enregistré pour le "
+                                f"projet « {projet.name} ».",
+                            )
+                            try:
+                                db.session.commit()
+                            except Exception:
+                                db.session.rollback()
+                                flash(
+                                    "Le scénario n'a pas pu être enregistré.",
+                                    'error',
+                                )
+                            else:
+                                flash('Scénario enregistré.', 'success')
+
+    scenarios = _scenarios_enregistres(projet)
+    return render_template(
+        'projects/optimisation.html',
+        projet=projet,
+        taches=taches,
+        taches_critiques=taches_critiques,
+        durees_formulaire=durees_formulaire,
+        chemins_critiques=planning.chemins_critiques if planning is not None else [],
+        duree_totale=planning.duree_totale if planning is not None else None,
+        resultat=resultat_simulation,
+        nom_scenario=nom_scenario,
+        scenarios=scenarios,
+        scenarios_affiches=[_details_scenario(scenario) for scenario in scenarios],
     )
 
 
