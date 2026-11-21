@@ -78,6 +78,15 @@ except ImportError:
 else:
     app.register_blueprint(optimisation_ia_bp)
 
+try:
+    from routes_ia_gestion import ia_gestion_bp
+except ImportError:
+    # Lot IA-4 livré en parallèle : le reste de l'application démarre même si
+    # le blueprint de gestion assistée n'est pas encore disponible.
+    app.logger.info("routes_ia_gestion indisponible : blueprint IA-4 non enregistré.")
+else:
+    app.register_blueprint(ia_gestion_bp)
+
 
 @app.after_request
 def ajouter_en_tetes_securite(response):

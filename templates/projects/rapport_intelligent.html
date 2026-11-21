@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Rapport intelligent — {{ projet.name }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        .mp-page { max-width: 1150px; }
+        .mp-nav { justify-content: flex-end; }
+        .mp-aide { font-size: .85rem; color: #6b7280; line-height: 1.55; }
+        .mp-meta { color: #6b7280; font-size: .9rem; }
+        .mp-bandeau { background: #eff6ff; border: 1px solid #bfdbfe; border-left: 6px solid #2563eb; color: #1e40af; padding: 14px 18px; border-radius: 8px; margin: 16px 0 20px; line-height: 1.55; }
+        .mp-reference { background: #ecfdf5; border-color: #86efac; }
+        .mp-reference h2 { color: #166534; }
+        .mp-encadre { background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 14px 18px; margin: 16px 0; }
+        .mp-encadre h2, .mp-encadre h3 { margin: 0 0 9px; font-size: 1rem; color: #1e3a8a; }
+        .mp-encadre p, .mp-encadre ul { margin: 0; line-height: 1.6; }
+        .mp-encadre ul { padding-left: 20px; }
+        .mp-avertissement { background: #fffbeb; border-color: #fcd34d; }
+        .mp-avertissement h2 { color: #92400e; }
+        .mp-cartes { display: flex; flex-wrap: wrap; gap: 12px; margin: 14px 0 20px; }
+        .mp-carte { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px 16px; min-width: 170px; flex: 1; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+        .mp-carte span { display: block; font-size: .78rem; color: #6b7280; text-transform: uppercase; letter-spacing: .04em; }
+        .mp-carte strong { display: block; margin-top: 4px; font-size: 1.15rem; color: #1e3a8a; }
+        .mp-table { width: 100%; border-collapse: collapse; font-size: .86rem; }
+        .mp-table th, .mp-table td { border: 1px solid #e5e7eb; padding: 7px 10px; text-align: left; vertical-align: top; }
+        .mp-table th { background: #f3f4f6; color: #374151; }
+        .mp-origin { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: .76rem; font-weight: 700; background: #ede9fe; color: #5b21b6; }
+        .mp-btn { display: inline-block; background: #2563eb; color: #fff; padding: 9px 16px; border-radius: 6px; font-size: .88rem; font-weight: 600; text-decoration: none; margin: 10px 8px 0 0; }
+        .mp-btn:hover { background: #1d4ed8; color: #fff; text-decoration: none; }
+        .mp-btn-neutre { background: #e5e7eb; color: #1f2937; }
+        .mp-btn-neutre:hover { background: #d1d5db; color: #111827; }
+        .mp-flash { padding: 10px 14px; border-radius: 6px; margin-bottom: 10px; font-size: .9rem; }
+        .mp-flash-success { background: #dcfce7; color: #166534; }
+        .mp-flash-error { background: #fee2e2; color: #991b1b; }
+    </style>
+</head>
+<body>
+    <nav class="nav mp-nav">
+        <a href="{{ accueil_url }}">Accueil</a>
+        <a href="{{ mes_projets_url }}">Mes projets</a>
+        <a href="{{ url_for('projects.detail', project_id=projet.id) }}">Détail du projet</a>
+        {% if current_user.is_authenticated %}
+        <a href="{{ deconnexion_url }}">Déconnexion</a>
+        {% endif %}
+    </nav>
+
+    <main class="mp-page">
+        <h1>Rapport intelligent</h1>
+        <p class="mp-aide">Projet : <strong>{{ projet.name }}</strong></p>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for categorie, message in messages %}
+                <div class="mp-flash mp-flash-{{ categorie }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <div class="mp-bandeau">
+            <strong>{{ synthese.titre }}</strong><br>
+            Date de génération : {{ synthese.date_generation }}
+            &nbsp;·&nbsp; Source des chiffres : {{ synthese.source_chiffres }}
+        </div>
+
+        <section class="mp-encadre mp-reference" aria-labelledby="reference-titre">
+            <h2 id="reference-titre">Données de référence</h2>
+            {% set reference = synthese.donnees_reference or {} %}
+            <div class="mp-cartes">
+                <div class="mp-carte"><span>Durée totale</span><strong>{{ reference.get('duree_totale', '—') }} {{ reference.get('unite', '') }}</strong></div>
+                <div class="mp-carte"><span>Tâches</span><strong>{{ reference.get('nombre_taches', '—') }}</strong></div>
+                <div class="mp-carte"><span>Tâches critiques</span><strong>{{ reference.get('nombre_critiques', '—') }}</strong></div>
+                <div class="mp-carte"><span>Relations</span><strong>{{ reference.get('relations', 'FS') }}</strong></div>
+            </div>
+            {% if reference.get('chemins_critiques') %}
+            <h3>Chemins critiques</h3>
+            <ul>
+                {% for chemin in reference.get('chemins_critiques', []) %}
+                <li>{{ chemin }}</li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <p class="mp-meta">Aucun chemin critique transmis par le moteur.</p>
+            {% endif %}
+        </section>
+
+        <section class="mp-encadre" aria-labelledby="hypotheses-titre">
+            <h2 id="hypotheses-titre">Hypothèses</h2>
+            <ul>
+                {% for hypothese in synthese.hypotheses or [] %}<li>{{ hypothese }}</li>{% endfor %}
+            </ul>
+        </section>
+
+        <section class="mp-encadre" aria-labelledby="synthese-titre">
+            <h2 id="synthese-titre">Synthèse</h2>
+            <p>{{ synthese.synthese }}</p>
+        </section>
+
+        <section class="mp-encadre" aria-labelledby="facteurs-titre">
+            <h2 id="facteurs-titre">Facteurs de durée</h2>
+            <ul>
+                {% for facteur in synthese.facteurs_duree or [] %}<li>{{ facteur }}</li>{% endfor %}
+            </ul>
+        </section>
+
+        <section class="mp-encadre" aria-labelledby="chemin-titre">
+            <h2 id="chemin-titre">Commentaire sur le chemin critique</h2>
+            <p>{{ synthese.chemin_critique_commentaire }}</p>
+        </section>
+
+        <section class="mp-encadre" aria-labelledby="marges-titre">
+            <h2 id="marges-titre">Commentaire sur les marges</h2>
+            <p>{{ synthese.marges_commentaire }}</p>
+        </section>
+
+        <section class="mp-encadre" aria-labelledby="risques-titre">
+            <h2 id="risques-titre">Risques identifiés</h2>
+            <ul>
+                {% for risque in synthese.risques or [] %}
+                <li>
+                    {{ risque }}
+                    {% if 'regle+ia' in risque %}<span class="mp-origin">Règle + appréciation IA</span>
+                    {% else %}<span class="mp-origin">Règle calculée</span>{% endif %}
+                </li>
+                {% endfor %}
+            </ul>
+        </section>
+
+        <section class="mp-encadre" aria-labelledby="recommandations-titre">
+            <h2 id="recommandations-titre">Recommandations</h2>
+            <ul>
+                {% for recommandation in synthese.recommandations or [] %}<li>{{ recommandation }}</li>{% endfor %}
+            </ul>
+        </section>
+
+        <section class="mp-encadre" aria-labelledby="scenarios-titre">
+            <h2 id="scenarios-titre">Scénarios simulés</h2>
+            <ul>
+                {% for scenario in synthese.scenarios_commentaires or [] %}<li>{{ scenario }}</li>{% endfor %}
+            </ul>
+            <p class="mp-aide">Ces scénarios sont des hypothèses recalculées : aucun n'est appliqué au planning de référence.</p>
+        </section>
+
+        <section class="mp-encadre mp-avertissement" aria-labelledby="avertissements-titre">
+            <h2 id="avertissements-titre">Avertissements et limites</h2>
+            <ul>
+                {% for avertissement in synthese.avertissements or [] %}<li>{{ avertissement }}</li>{% endfor %}
+            </ul>
+        </section>
+
+        {% if synthese.appreciation_ia %}
+        <section class="mp-encadre" aria-labelledby="appreciation-titre">
+            <h2 id="appreciation-titre">Appréciation IA (vérifiée)</h2>
+            <p>{{ synthese.appreciation_ia }}</p>
+            <p class="mp-aide">Cette appréciation ne remplace aucun chiffre calculé par le moteur.</p>
+        </section>
+        {% endif %}
+
+        <p>
+            <a class="mp-btn" href="{{ url_for('projects.rapport_pdf', project_id=projet.id) }}">📄 Télécharger le rapport PDF (serveur)</a>
+            <a class="mp-btn mp-btn-neutre" href="{{ url_for('projects.detail', project_id=projet.id) }}">Retour au détail du projet</a>
+        </p>
+    </main>
+</body>
+</html>

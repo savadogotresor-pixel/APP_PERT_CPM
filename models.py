@@ -168,6 +168,26 @@ class Scenario(db.Model):
     projet = db.relationship('Project', backref='scenarios')
 
 
+class AlerteRisque(db.Model):
+    """Alerte de risque calculée par règles, éventuellement commentée par l'IA."""
+
+    __tablename__ = 'alerte_risque'
+    id = db.Column(db.Integer, primary_key=True)
+    project_id = db.Column(db.Integer, db.ForeignKey('project.id'),
+                           nullable=False, index=True)
+    code_tache = db.Column(db.String(50))
+    titre = db.Column(db.String(200), nullable=False)
+    niveau = db.Column(db.String(20), default='indicatif')
+    justification = db.Column(db.Text)
+    recommandation = db.Column(db.Text)
+    origine = db.Column(db.String(20), default='regle')  # 'regle' ou 'regle+ia'
+    appreciation_ia = db.Column(db.Text)  # None si aucun fournisseur IA
+    statut = db.Column(db.String(20), default='en_attente')  # en_attente|confirme|rejete
+    commentaire = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, server_default=db.func.now())
+    projet = db.relationship('Project', backref='alertes_risque')
+
+
 def project_to_taches(project):
     """Convertit les tâches d'un projet au format attendu par le moteur PERT.
 

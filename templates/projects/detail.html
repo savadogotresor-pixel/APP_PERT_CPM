@@ -63,6 +63,9 @@
                 <a class="mp-btn mp-btn-secondary" href="{{ url_for('ia.nouveau_projet_wbs') }}">🧱 Générer un projet avec l'IA</a>
                 {% set assistance_href = url_optimisation_assistee(projet.id) if url_optimisation_assistee is defined else url_for('projects.optimisation', project_id=projet.id) %}
                 <a class="mp-btn mp-btn-secondary" href="{{ assistance_href }}">⚡ Optimisation assistée (IA)</a>
+                <a class="mp-btn mp-btn-secondary" href="{{ url_for('ia_gestion.risques', project_id=projet.id) }}">🛡️ Analyse des risques (IA)</a>
+                <a class="mp-btn mp-btn-secondary" href="{{ url_for('ia_gestion.action_assistee', project_id=projet.id) }}">🗣️ Action en langage naturel (IA)</a>
+                <a class="mp-btn mp-btn-secondary" href="{{ url_for('ia_gestion.rapport_intelligent', project_id=projet.id) }}">🧠 Rapport intelligent</a>
                 <a class="mp-btn" href="{{ url_for('projects.new_task', project_id=projet.id) }}">➕ Nouvelle tâche</a>
             </div>
         </div>
