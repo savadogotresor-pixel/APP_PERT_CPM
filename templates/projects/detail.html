@@ -54,6 +54,9 @@
             </div>
             <div>
                 <a class="mp-btn mp-btn-secondary" href="{{ url_for('projects.edit_project', project_id=projet.id) }}">Modifier le projet</a>
+                <a class="mp-btn mp-btn-secondary" href="{{ url_for('projects.import_fichier', project_id=projet.id) }}">⬆️ Importer un fichier</a>
+                <a class="mp-btn mp-btn-secondary" href="{{ url_for('projects.export_csv', project_id=projet.id) }}">⬇️ CSV</a>
+                <a class="mp-btn mp-btn-secondary" href="{{ url_for('projects.export_xlsx', project_id=projet.id) }}">⬇️ Excel</a>
                 <a class="mp-btn" href="{{ url_for('projects.new_task', project_id=projet.id) }}">➕ Nouvelle tâche</a>
             </div>
         </div>

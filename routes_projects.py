@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from datetime import date, datetime, timedelta
+from io import BytesIO
 
 from flask import (
     Blueprint,
@@ -19,12 +20,15 @@ from flask import (
     redirect,
     render_template,
     request,
+    send_file,
     url_for,
 )
 from flask_login import current_user, login_required
 from sqlalchemy import inspect as sa_inspect
+from werkzeug.utils import secure_filename
 
 from extensions import db
+from logic.data import parser_taches
 from logic.pert import ValidationError, compute
 from models import (
     AuditLog,
@@ -34,6 +38,7 @@ from models import (
     project_to_taches,
     user_can_access,
 )
+from services.import_export import exporter_csv, exporter_xlsx, importer_fichier
 
 try:  # Werkzeug >= 2.1
     from werkzeug.routing.exceptions import BuildError
@@ -45,6 +50,9 @@ projects_bp = Blueprint('projects', __name__, url_prefix='/projects')
 
 STATUT_ACTIF = 'actif'
 STATUT_ARCHIVE = 'archive'
+
+MIME_CSV = 'text/csv; charset=utf-8'
+MIME_XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 
 # Noms possibles de la colonne « tâche dépendante » selon le modèle retenu.
 _COLONNES_PROPRIETAIRES = (
@@ -103,6 +111,30 @@ def _journal(action, details):
     db.session.add(
         AuditLog(user_id=current_user.id, action=action, details=str(details))
     )
+
+
+def _messages_erreur(exception):
+    """Découpe les messages agrégés par ``ValidationError`` en lignes propres."""
+    return [ligne.strip() for ligne in str(exception).split('\n') if ligne.strip()]
+
+
+def _nom_export(projet, extension):
+    """Nom de téléchargement sûr, dérivé du nom du projet."""
+    base = secure_filename(projet.name or '') or 'projet'
+    return f'{base}_resultats.{extension}'
+
+
+def _apercu_import(taches):
+    """Prépare les lignes du tableau d'aperçu d'un fichier importé."""
+    return [
+        {
+            'code': code,
+            'description': infos.get('description', ''),
+            'duree': infos.get('duree', 0),
+            'predecesseurs': ', '.join(infos.get('depend_de') or []),
+        }
+        for code, infos in sorted(taches.items())
+    ]
 
 
 def _date_reference(projet):
@@ -519,6 +551,177 @@ def detail(project_id):
         erreur_calcul=erreur_calcul,
         nb_critiques=nb_critiques,
         date_fin_estimee=fin_estimee,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Routes — import / export
+# ---------------------------------------------------------------------------
+
+@projects_bp.route('/<int:project_id>/import', methods=['GET', 'POST'])
+@login_required
+def import_fichier(project_id):
+    projet = _projet_ou_404(project_id)
+    apercu = None
+    erreurs = []
+    nom_fichier = ''
+
+    if request.method == 'POST':
+        fichier = request.files.get('fichier')
+        confirmer = bool(request.form.get('confirmer'))
+        nom_fichier = (fichier.filename if fichier is not None else '') or ''
+        taches_importees = {}
+
+        if fichier is None or not nom_fichier:
+            erreurs.append("Sélectionnez un fichier .csv ou .xlsx à importer.")
+        else:
+            texte, erreurs_fichier = importer_fichier(fichier.read(), nom_fichier)
+            erreurs.extend(erreurs_fichier)
+
+            taches_importees, erreurs_parser = parser_taches(texte or '')
+            erreurs.extend(erreurs_parser)
+            if not taches_importees and not erreurs:
+                erreurs.append("Aucune tâche n'a été trouvée dans ce fichier.")
+
+            taches_existantes = project_to_taches(projet)
+            graphe_fusionne = deepcopy(taches_existantes)
+            collisions = sorted(set(taches_existantes) & set(taches_importees))
+            for code in collisions:
+                erreurs.append(
+                    f"Le code « {code} » existe déjà dans ce projet : "
+                    "l'import est annulé pour éviter de l'écraser."
+                )
+            if not collisions:
+                graphe_fusionne.update(deepcopy(taches_importees))
+                if not erreurs:
+                    try:
+                        compute(graphe_fusionne)
+                    except ValidationError as exc:
+                        erreurs.extend(_messages_erreur(exc))
+
+        apercu = _apercu_import(taches_importees)
+
+        if confirmer and not erreurs:
+            nouvelles = []
+            for code, infos in taches_importees.items():
+                tache = Task(
+                    project_id=projet.id,
+                    code=code,
+                    description=infos.get('description', ''),
+                    duree=int(infos.get('duree', 0)),
+                )
+                db.session.add(tache)
+                nouvelles.append(tache)
+            db.session.flush()
+
+            par_code = {tache.code: tache for tache in projet.tasks}
+            par_code.update({tache.code: tache for tache in nouvelles})
+            infos_dependance = _colonne_proprietaire_dependance()
+            cle_proprietaire = (
+                infos_dependance[0] if infos_dependance else 'task_id'
+            )
+            codes_en_stockage = _predecesseur_est_un_code()
+
+            for code, infos in taches_importees.items():
+                for predecesseur in dict.fromkeys(infos.get('depend_de') or []):
+                    cible = par_code.get(predecesseur)
+                    if cible is None:
+                        erreurs.append(
+                            f"Le prédécesseur « {predecesseur} » n'a pas pu être résolu."
+                        )
+                        continue
+                    valeur = (
+                        cible.code if codes_en_stockage else cible.id
+                    )
+                    db.session.add(
+                        Dependency(
+                            **{
+                                cle_proprietaire: par_code[code].id,
+                                'predecessor_id': valeur,
+                            }
+                        )
+                    )
+
+            if erreurs:
+                db.session.rollback()
+            else:
+                _journal(
+                    'IMPORT_FICHIER',
+                    f"{len(nouvelles)} tâche(s) importée(s) dans le projet "
+                    f"« {projet.name} » depuis « {nom_fichier} ».",
+                )
+                db.session.commit()
+                flash(
+                    f"{len(nouvelles)} tâche(s) importée(s) avec succès.",
+                    'success',
+                )
+                return redirect(url_for('projects.detail', project_id=projet.id))
+
+    return render_template(
+        'projects/import.html',
+        projet=projet,
+        apercu=apercu,
+        erreurs=erreurs,
+        nom_fichier=nom_fichier,
+    )
+
+
+@projects_bp.route('/<int:project_id>/export.csv')
+@login_required
+def export_csv(project_id):
+    projet = _projet_ou_404(project_id)
+    taches = project_to_taches(projet)
+
+    try:
+        resultat = compute(taches)
+    except ValidationError as exc:
+        for erreur in _messages_erreur(exc):
+            flash(erreur, 'error')
+        return redirect(url_for('projects.detail', project_id=projet.id))
+
+    donnees = exporter_csv(taches, resultat.resultats)
+    _journal(
+        'EXPORT_CSV',
+        f"Résultats du projet « {projet.name} » exportés au format CSV.",
+    )
+    db.session.commit()
+    return send_file(
+        BytesIO(donnees),
+        mimetype=MIME_CSV,
+        as_attachment=True,
+        download_name=_nom_export(projet, 'csv'),
+    )
+
+
+@projects_bp.route('/<int:project_id>/export.xlsx')
+@login_required
+def export_xlsx(project_id):
+    projet = _projet_ou_404(project_id)
+    taches = project_to_taches(projet)
+
+    try:
+        resultat = compute(taches)
+    except ValidationError as exc:
+        for erreur in _messages_erreur(exc):
+            flash(erreur, 'error')
+        return redirect(url_for('projects.detail', project_id=projet.id))
+
+    donnees = exporter_xlsx(
+        taches,
+        resultat.resultats,
+        resultat.duree_totale,
+        resultat.chemins_critiques,
+    )
+    _journal(
+        'EXPORT_XLSX',
+        f"Résultats du projet « {projet.name} » exportés au format Excel.",
+    )
+    db.session.commit()
+    return send_file(
+        BytesIO(donnees),
+        mimetype=MIME_XLSX,
+        as_attachment=True,
+        download_name=_nom_export(projet, 'xlsx'),
     )
 
 
