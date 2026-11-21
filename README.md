@@ -2,6 +2,10 @@
 
 Une application web **Flask** pour calculer et visualiser un planning de projet avec la méthode **PERT/CPM** : dates au plus tôt et au plus tard, marges, chemin critique, graphe de réseau, diagramme de Gantt et export Excel.
 
+## Démo en ligne
+
+🚀 [https://app-pert-cpm.onrender.com/](https://app-pert-cpm.onrender.com/)
+
 ## Fonctionnalités
 
 - **Démo prête à l'emploi** avec un projet de 12 tâches (`/demo`)
