@@ -6,8 +6,8 @@ import os
 import sys
 from datetime import date, timedelta
 
-from flask import Flask, jsonify, render_template, request, send_file
-from flask_login import login_required
+from flask import Flask, jsonify, render_template, request, send_file, send_from_directory
+from flask_login import current_user, login_required
 from werkzeug.exceptions import HTTPException
 from werkzeug.middleware.proxy_fix import ProxyFix
 from openpyxl import Workbook
@@ -20,7 +20,7 @@ from extensions import db, login_manager, csrf
 from logic.calcul import generer_conseils
 from logic.data import taches, parser_taches
 from logic.pert import compute, ValidationError
-from models import User, init_db
+from models import Dependency, Project, Task, User, init_db
 from routes_auth import auth_bp
 from routes_projects import projects_bp
 try:
@@ -91,6 +91,13 @@ except ImportError:
     app.logger.info("routes_ia_gestion indisponible : blueprint IA-4 non enregistré.")
 else:
     app.register_blueprint(ia_gestion_bp)
+
+try:
+    from routes_conseiller import conseiller_bp
+except ImportError:
+    app.logger.info("routes_conseiller indisponible : conseiller IA non enregistré.")
+else:
+    app.register_blueprint(conseiller_bp)
 
 
 @app.after_request
@@ -225,6 +232,87 @@ def accueil():
 @app.route('/health')
 def health():
     return jsonify({"status": "ok"})
+
+
+@app.route('/offline')
+def offline():
+    """Espace de travail hors ligne : calcul local des projets simples."""
+    return render_template('offline.html')
+
+
+@app.route('/sw.js')
+def service_worker():
+    """Service worker PWA : jamais de données utilisateur dans le cache."""
+    reponse = send_from_directory(
+        app.static_folder, 'sw.js', mimetype='application/javascript'
+    )
+    reponse.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    reponse.headers['Service-Worker-Allowed'] = '/'
+    return reponse
+
+
+@app.route('/manifest.webmanifest')
+def manifeste_web():
+    return send_from_directory(
+        app.static_folder, 'manifest.webmanifest',
+        mimetype='application/manifest+json'
+    )
+
+
+@app.route('/offline/sync', methods=['POST'])
+@login_required
+def synchroniser_offline():
+    """Importe un projet calculé hors ligne dans le compte connecté."""
+    donnees = request.get_json(silent=True) or {}
+    nom = str(donnees.get('nom') or '').strip()[:200]
+    taches = donnees.get('taches')
+    if not nom or not isinstance(taches, dict) or not taches:
+        return jsonify({"ok": False, "erreur": "Projet invalide."}), 400
+
+    graphe = {}
+    for code, infos in taches.items():
+        if not isinstance(code, str) or not code.strip():
+            return jsonify({"ok": False, "erreur": "Code de tâche invalide."}), 400
+        if not isinstance(infos, dict):
+            return jsonify({"ok": False, "erreur": "Tâche invalide."}), 400
+        duree = infos.get('duree', 0)
+        if isinstance(duree, bool) or not isinstance(duree, (int, float)):
+            return jsonify({"ok": False, "erreur": "Durée invalide."}), 400
+        dependances = infos.get('depend_de') or []
+        if not isinstance(dependances, list):
+            return jsonify({"ok": False, "erreur": "Dépendances invalides."}), 400
+        graphe[code.strip()] = {
+            "description": str(infos.get('description') or '')[:2000],
+            "duree": duree,
+            "depend_de": [str(d).strip() for d in dependances if str(d).strip()],
+        }
+
+    try:
+        compute(graphe)
+    except ValidationError as exc:
+        return jsonify({"ok": False, "erreur": str(exc)}), 400
+
+    projet = Project(user_id=current_user.id, name=nom, description="Importé depuis le mode hors ligne")
+    db.session.add(projet)
+    db.session.flush()
+    objets = {}
+    for code, infos in graphe.items():
+        tache = Task(
+            project_id=projet.id,
+            code=code,
+            description=infos['description'],
+            duree=int(infos['duree']),
+        )
+        db.session.add(tache)
+        db.session.flush()
+        objets[code] = tache
+    for code, infos in graphe.items():
+        for pred in infos['depend_de']:
+            if pred in objets:
+                db.session.add(Dependency(successor_id=objets[code].id,
+                                          predecessor_id=objets[pred].id))
+    db.session.commit()
+    return jsonify({"ok": True, "projet_id": projet.id}), 201
 
 
 @app.route('/demo')

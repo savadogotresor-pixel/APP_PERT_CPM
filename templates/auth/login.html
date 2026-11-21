@@ -16,10 +16,23 @@
     <header class="topbar">
         <a class="topbar-brand" href="{{ url_for('accueil') }}"><span class="topbar-brand-icon">📊</span> PERT/CPM</a>
         <ul class="topbar-nav">
+            {% if current_user.is_authenticated %}
             <li><a href="{{ url_for('accueil') }}">Accueil</a></li>
-            <li><a href="{{ projects_url|default('/projets', true) }}">Mes projets</a></li>
+            {% endif %}
+            <li><a href="/demo">📊 Démo (12 tâches)</a></li>
+            <li><a href="/saisie">✏️ Saisie des tâches</a></li>
+            {% if current_user.is_authenticated %}
             <li><a href="{{ url_for('auth.profile') }}">Profil</a></li>
+            <li><a href="{{ projects_url|default('/projets', true) }}">Mes projets</a></li>
+            <li>
+                {% set lien_assistant = assistant_url|default(url_for('projects.list_projects'), true) %}
+                <a href="{{ lien_assistant }}">Assistant IA</a>
+            </li>
+            {% if current_user.is_admin %}
+            <li><a href="{{ url_for('admin.index') }}">Administration</a></li>
+            {% endif %}
             <li><a href="{{ url_for('auth.logout') }}">Déconnexion</a></li>
+            {% endif %}
         </ul>
     </header>
 
@@ -73,6 +86,9 @@
 
                 <p class="auth-lien mt-3">
                     Pas encore de compte ? <a href="{{ url_for('auth.register') }}">Créer un compte</a>
+                </p>
+                <p class="auth-lien mt-2">
+                    Pas besoin de compte pour les tâches simples : <a href="{{ url_for('offline') }}">travailler hors ligne</a>.
                 </p>
             </div>
         </div>

@@ -43,11 +43,43 @@
             {% endif %}
         {% endwith %}
 
+        <form class="mp-filters d-flex align-center gap-2" method="get" action="{{ url_for('projects.list_projects') }}">
+            <label class="mp-confirm">Rechercher
+                <input type="text" name="q" value="{{ pagination.q }}" placeholder="Nom ou description du projet">
+            </label>
+            <label class="mp-confirm">Statut
+                <select name="statut">
+                    <option value="" {% if not pagination.statut %}selected{% endif %}>Tous</option>
+                    <option value="actif" {% if pagination.statut == 'actif' %}selected{% endif %}>Actif</option>
+                    <option value="archive" {% if pagination.statut == 'archive' %}selected{% endif %}>Archivé</option>
+                </select>
+            </label>
+            <label class="mp-confirm">Par page
+                <select name="par_page">
+                    {% for choix in (10, 25, 50, 100) %}
+                    <option value="{{ choix }}" {% if pagination.par_page == choix %}selected{% endif %}>{{ choix }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <button class="btn btn-secondary btn-sm mp-btn mp-btn-secondary" type="submit">Filtrer</button>
+        </form>
+
+        <form id="batch-form" class="mp-batch-actions d-flex align-center gap-2" method="post" action="{{ url_for('projects.batch_recalculer') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="page" value="{{ pagination.page }}">
+            <input type="hidden" name="par_page" value="{{ pagination.par_page }}">
+            <input type="hidden" name="q" value="{{ pagination.q }}">
+            <input type="hidden" name="statut" value="{{ pagination.statut }}">
+            <button class="btn btn-secondary btn-sm mp-btn mp-btn-secondary" type="submit">Recalculer la sélection</button>
+            <button class="btn btn-danger btn-sm mp-btn mp-btn-danger" type="submit" formaction="{{ url_for('projects.batch_supprimer') }}" onclick="return confirm('Supprimer définitivement les projets sélectionnés ?');">Supprimer la sélection</button>
+        </form>
+
         {% if lignes %}
         <div class="table-wrapper">
             <table class="data-table mp-table">
                 <thead>
                     <tr>
+                        <th><input type="checkbox" id="batch-select-all" form="batch-form" title="Sélectionner tous les projets de cette page"></th>
                         <th>Projet</th>
                         <th>Description</th>
                         <th>Date de référence</th>
@@ -62,6 +94,7 @@
                     {% set projet = ligne.projet %}
                     {% set archive = projet.status == 'archive' %}
                     <tr>
+                        <td><input type="checkbox" name="ids" value="{{ projet.id }}" form="batch-form" aria-label="Sélectionner le projet {{ projet.name }}"></td>
                         <td><strong><a href="{{ url_for('projects.detail', project_id=projet.id) }}">{{ projet.name }}</a></strong></td>
                         <td>{{ projet.description or '—' }}</td>
                         <td>{{ projet.date_reference or '—' }}</td>
@@ -103,7 +136,36 @@
             <p><a class="btn btn-primary" href="{{ url_for('projects.new_project') }}">Créer mon premier projet</a></p>
         </div>
         {% endif %}
+
+        <nav class="pagination mp-pagination d-flex align-center gap-2" aria-label="Pagination des projets">
+            {% if pagination.has_prev %}
+            <a class="btn btn-secondary btn-sm mp-btn mp-btn-secondary" href="{{ url_for('projects.list_projects', page=pagination.prev_num, par_page=pagination.par_page, q=pagination.q, statut=pagination.statut) }}">Précédent</a>
+            {% endif %}
+            {% for numero in pagination.page_numbers %}
+                {% if numero is none %}
+                <span aria-hidden="true">…</span>
+                {% elif numero == pagination.page %}
+                <span class="btn btn-primary btn-sm mp-btn mp-btn-primary active" aria-current="page">{{ numero }}</span>
+                {% else %}
+                <a class="btn btn-secondary btn-sm mp-btn mp-btn-secondary" href="{{ url_for('projects.list_projects', page=numero, par_page=pagination.par_page, q=pagination.q, statut=pagination.statut) }}">{{ numero }}</a>
+                {% endif %}
+            {% endfor %}
+            {% if pagination.has_next %}
+            <a class="btn btn-secondary btn-sm mp-btn mp-btn-secondary" href="{{ url_for('projects.list_projects', page=pagination.next_num, par_page=pagination.par_page, q=pagination.q, statut=pagination.statut) }}">Suivant</a>
+            {% endif %}
+        </nav>
+        <p class="mp-pagination-info">{{ pagination.total }} projet(s) — page {{ pagination.page }} sur {{ pagination.pages }}</p>
     </main>
 </div>
+<script>
+(function () {
+    var tout = document.getElementById('batch-select-all');
+    if (!tout) { return; }
+    tout.addEventListener('change', function () {
+        var cases = document.querySelectorAll('input[name="ids"][form="batch-form"]');
+        for (var i = 0; i < cases.length; i++) { cases[i].checked = tout.checked; }
+    });
+})();
+</script>
 </body>
 </html>

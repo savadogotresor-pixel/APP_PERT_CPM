@@ -48,6 +48,12 @@ class User(UserMixin, db.Model):
 class Project(db.Model):
     __tablename__ = 'project'
 
+    # Index explicite pour les requêtes groupées par propriétaire et par date
+    # de création : aucune colonne n'est modifiée.
+    __table_args__ = (
+        db.Index('ix_project_user_id_created_at', 'user_id', 'created_at'),
+    )
+
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(
         db.Integer, db.ForeignKey('user.id', ondelete='CASCADE'),
@@ -78,6 +84,11 @@ class Project(db.Model):
 
 class Task(db.Model):
     __tablename__ = 'task'
+
+    # Accès groupé aux tâches d'un projet (lots de suppression/export).
+    __table_args__ = (
+        db.Index('ix_task_project_id_batch', 'project_id'),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
     project_id = db.Column(

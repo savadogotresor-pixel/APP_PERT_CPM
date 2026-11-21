@@ -25,7 +25,8 @@ from flask import (
     url_for,
 )
 from flask_login import current_user, login_required
-from sqlalchemy import inspect as sa_inspect
+from sqlalchemy import func, inspect as sa_inspect, or_
+from sqlalchemy.orm import joinedload
 from werkzeug.utils import secure_filename
 
 from extensions import db
@@ -35,10 +36,12 @@ from models import (
     AuditLog,
     Dependency,
     Project,
+    ProjectAccess,
     Task,
     project_to_taches,
     user_can_access,
 )
+from services.batch import recalculer_projets, supprimer_projets
 from services.import_export import exporter_csv, exporter_xlsx, importer_fichier
 
 try:
@@ -74,6 +77,9 @@ STATUT_ARCHIVE = 'archive'
 MIME_CSV = 'text/csv; charset=utf-8'
 MIME_XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 
+PAR_PAGE_DEFAUT = 25
+PAR_PAGE_MAX = 100
+
 # Noms possibles de la colonne « tâche dépendante » selon le modèle retenu.
 _COLONNES_PROPRIETAIRES = (
     'task_id',
@@ -96,6 +102,64 @@ def _url_ou_defaut(*endpoints, defaut='#'):
         except BuildError:  # endpoint non enregistré ou paramètres manquants
             continue
     return defaut
+
+
+def _entier_positif(valeur, defaut, maximum=None):
+    """Convertit un paramètre de requête en entier >= 1, borné et sans levée."""
+    try:
+        nombre = int(valeur)
+    except (TypeError, ValueError):
+        return defaut
+    if nombre < 1:
+        return defaut
+    return min(nombre, maximum) if maximum is not None else nombre
+
+
+def _numeros_pages(page, pages, etendue=2):
+    """Numéros à afficher, avec ``None`` matérialisant une ellipse."""
+    if pages <= 1:
+        return [1]
+    nombres = sorted(
+        {1, pages}
+        | set(range(max(1, page - etendue), min(pages, page + etendue) + 1))
+    )
+    resultat = []
+    precedent = 0
+    for nombre in nombres:
+        if precedent and nombre > precedent + 1:
+            resultat.append(None)
+        resultat.append(nombre)
+        precedent = nombre
+    return resultat
+
+
+def _ids_formulaire():
+    """Identifiants cochés dans un formulaire groupé (doublons exclus)."""
+    identifiants = []
+    vus = set()
+    for brute in request.form.getlist('ids'):
+        try:
+            identifiant = int(brute)
+        except (TypeError, ValueError):
+            continue
+        if identifiant > 0 and identifiant not in vus:
+            vus.add(identifiant)
+            identifiants.append(identifiant)
+        if len(identifiants) >= 1000:
+            break
+    return identifiants
+
+
+def _parametres_liste():
+    """Conserve filtres et pagination lors d'une redirection post-batch."""
+    return {
+        'page': _entier_positif(request.form.get('page'), 1),
+        'par_page': _entier_positif(
+            request.form.get('par_page'), PAR_PAGE_DEFAUT, PAR_PAGE_MAX
+        ),
+        'q': (request.form.get('q') or '').strip() or None,
+        'statut': (request.form.get('statut') or '').strip() or None,
+    }
 
 
 @projects_bp.context_processor
@@ -473,8 +537,50 @@ def _donnees_tache(projet, tache=None):
 @projects_bp.route('/')
 @login_required
 def list_projects():
-    projets = [p for p in Project.query.all() if user_can_access(p, current_user)]
-    projets.sort(key=lambda p: ((p.name or '').lower(), p.id or 0))
+    """Liste paginée et filtrable des projets accessibles à l'utilisateur."""
+    page = _entier_positif(request.args.get('page'), 1)
+    par_page = _entier_positif(
+        request.args.get('par_page'), PAR_PAGE_DEFAUT, PAR_PAGE_MAX
+    )
+    q = (request.args.get('q') or '').strip()
+    statut = (request.args.get('statut') or '').strip()
+    if statut not in (STATUT_ACTIF, STATUT_ARCHIVE):
+        statut = ''
+
+    requete = Project.query
+    if not getattr(current_user, 'is_admin', False):
+        # Même règle que ``user_can_access`` : propriétaire ou accès explicite.
+        acces = db.session.query(ProjectAccess.project_id).filter(
+            ProjectAccess.user_id == current_user.id
+        )
+        requete = requete.filter(
+            or_(Project.user_id == current_user.id, Project.id.in_(acces))
+        )
+    if q:
+        motif = '%' + q.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_') + '%'
+        requete = requete.filter(
+            or_(
+                Project.name.ilike(motif, escape='\\'),
+                Project.description.ilike(motif, escape='\\'),
+            )
+        )
+    if statut:
+        requete = requete.filter(Project.status == statut)
+
+    total = requete.count()
+    pages = max(1, (total + par_page - 1) // par_page)
+    page = min(page, pages)
+    projets = (
+        requete.options(
+            joinedload(Project.tasks)
+            .joinedload(Task.dependances)
+            .joinedload(Dependency.predecessor)
+        )
+        .order_by(func.lower(Project.name).asc(), Project.id.asc())
+        .offset((page - 1) * par_page)
+        .limit(par_page)
+        .all()
+    )
     lignes = [
         {
             'projet': projet,
@@ -483,7 +589,73 @@ def list_projects():
         }
         for projet in projets
     ]
-    return render_template('projects/list.html', lignes=lignes)
+    pagination = {
+        'page': page,
+        'par_page': par_page,
+        'per_page': par_page,
+        'total': total,
+        'pages': pages,
+        'has_prev': page > 1,
+        'has_next': page < pages,
+        'prev_num': page - 1 if page > 1 else None,
+        'next_num': page + 1 if page < pages else None,
+        'page_numbers': _numeros_pages(page, pages),
+        'lignes': lignes,
+        'q': q,
+        'statut': statut,
+        'arguments': {'par_page': par_page, 'q': q, 'statut': statut},
+    }
+    return render_template(
+        'projects/list.html', lignes=lignes, pagination=pagination
+    )
+
+
+@projects_bp.route('/batch/recalculer', methods=['POST'])
+@login_required
+def batch_recalculer():
+    """Recalcule les plannings des projets sélectionnés (propriété vérifiée)."""
+    identifiants = _ids_formulaire()
+    resume = recalculer_projets(identifiants, user_id=current_user.id)
+    if not identifiants:
+        flash("Sélectionnez au moins un projet.", 'error')
+    elif resume['reussis']:
+        flash(
+            f"{resume['reussis']} projet(s) recalculé(s) avec succès.", 'success'
+        )
+    if resume['echoues']:
+        flash(
+            f"{resume['echoues']} projet(s) n'ont pas pu être recalculés.", 'error'
+        )
+    _journal(
+        'BATCH_RECALCUL',
+        f"Recalcul groupé : {resume['reussis']} réussi(s), "
+        f"{resume['echoues']} échec(s).",
+    )
+    db.session.commit()
+    return redirect(url_for('projects.list_projects', **_parametres_liste()))
+
+
+@projects_bp.route('/batch/supprimer', methods=['POST'])
+@login_required
+def batch_supprimer():
+    """Supprime les projets sélectionnés appartenant à l'utilisateur connecté."""
+    identifiants = _ids_formulaire()
+    resume = supprimer_projets(identifiants, user_id=current_user.id)
+    if not identifiants:
+        flash("Sélectionnez au moins un projet.", 'error')
+    elif resume['reussis']:
+        flash(f"{resume['reussis']} projet(s) supprimé(s).", 'success')
+    if resume['echoues']:
+        flash(
+            f"{resume['echoues']} projet(s) n'ont pas pu être supprimés.", 'error'
+        )
+    _journal(
+        'BATCH_SUPPRESSION',
+        f"Suppression groupée : {resume['reussis']} réussi(s), "
+        f"{resume['echoues']} échec(s).",
+    )
+    db.session.commit()
+    return redirect(url_for('projects.list_projects', **_parametres_liste()))
 
 
 @projects_bp.route('/new', methods=['GET', 'POST'])

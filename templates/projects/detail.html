@@ -42,6 +42,7 @@
             <a class="btn btn-secondary btn-sm mp-btn mp-btn-secondary" href="{{ url_for('ia_gestion.risques', project_id=projet.id) }}">🛡️ Analyse des risques (IA)</a>
             <a class="btn btn-secondary btn-sm mp-btn mp-btn-secondary" href="{{ url_for('ia_gestion.action_assistee', project_id=projet.id) }}">🗣️ Action en langage naturel (IA)</a>
             <a class="btn btn-secondary btn-sm mp-btn mp-btn-secondary" href="{{ url_for('ia_gestion.rapport_intelligent', project_id=projet.id) }}">🧠 Rapport intelligent</a>
+            <a class="btn btn-secondary btn-sm mp-btn mp-btn-secondary" href="{{ url_for('conseiller.conseils', project_id=projet.id) }}">💡 Conseils (IA maison)</a>
             <a class="btn btn-primary btn-sm mp-btn" href="{{ url_for('projects.new_task', project_id=projet.id) }}">➕ Nouvelle tâche</a>
         </div>
 

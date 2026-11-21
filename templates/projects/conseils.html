@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Conseiller IA maison — {{ projet.name }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='design.css') }}">
+</head>
+<body>
+<div class="app-shell">
+    <header class="topbar">
+        <a class="topbar-brand" href="{{ accueil_url }}"><span class="topbar-brand-icon">📊</span> PERT/CPM</a>
+        <ul class="topbar-nav">
+            <li><a href="{{ accueil_url }}">Accueil</a></li>
+            <li><a href="{{ url_for('projects.list_projects') }}">Mes projets</a></li>
+            <li><a href="{{ url_for('projects.detail', project_id=projet.id) }}">{{ projet.name }}</a></li>
+            <li><a href="{{ url_for('conseiller.conseils', project_id=projet.id) }}">Conseils</a></li>
+            {% if current_user.is_authenticated %}
+            <li><a href="{{ deconnexion_url }}">Déconnexion</a></li>
+            {% endif %}
+        </ul>
+    </header>
+
+    <main class="container">
+        <div class="page-header">
+            <div>
+                <h1 class="page-title">🧭 Conseiller IA maison</h1>
+                <p class="page-subtitle">Projet : <strong>{{ projet.name }}</strong> — conseils vérifiables issus du calcul PERT/CPM</p>
+            </div>
+        </div>
+
+        <div class="actions-bar">
+            <a class="btn btn-secondary btn-sm mp-btn mp-btn-secondary" href="{{ url_for('projects.detail', project_id=projet.id) }}">← Retour au planning</a>
+            <a class="btn btn-secondary btn-sm mp-btn mp-btn-secondary" href="{{ url_for('projects.optimisation', project_id=projet.id) }}">⚡ Simuler une optimisation</a>
+            <a class="btn btn-primary btn-sm mp-btn" href="{{ url_for('projects.new_task', project_id=projet.id) }}">➕ Nouvelle tâche</a>
+        </div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+            <div class="flashes">
+                {% for categorie, message in messages %}
+                {% set alert_class = 'alert-success' if categorie == 'success' else ('alert-danger' if categorie == 'error' or categorie == 'danger' else ('alert-warning' if categorie == 'warning' else 'alert-info')) %}
+                <div class="alert {{ alert_class }} flash mp-flash mp-flash-{{ categorie }}">{{ message }}</div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        {% endwith %}
+
+        <div class="alert alert-info mp-bandeau">
+            <strong>Fonctionnement :</strong> ces conseils sont calculés localement par un moteur de règles déterministe
+            à partir des résultats du moteur PERT/CPM. Aucun service ni modèle externe n'est consulté, et aucune
+            estimation n'est ajoutée : chaque preuve ne contient que des chiffres calculés.
+        </div>
+
+        {% if erreur_calcul %}
+        <div class="alert alert-danger mp-alerte">
+            <div><strong>Planning non calculable :</strong> {{ erreur_calcul }}</div>
+            <div class="meta mp-meta">Aucun conseil n'est produit tant que le graphe de tâches n'est pas valide.</div>
+        </div>
+        {% endif %}
+
+        <h2 class="section-title">Synthèse du planning</h2>
+        <div class="stat-grid">
+            <div class="stat-card stat-card--primary mp-carte">
+                <span class="stat-label">Tâches</span>
+                <strong class="stat-value">{{ nb_taches }}</strong>
+                <span class="stat-icon" aria-hidden="true">📋</span>
+            </div>
+            <div class="stat-card stat-card--success mp-carte">
+                <span class="stat-label">Durée totale</span>
+                <strong class="stat-value">{{ duree_totale if duree_totale is not none else '—' }}</strong>
+                <span class="stat-icon" aria-hidden="true">⏱️</span>
+            </div>
+            <div class="stat-card stat-card--danger mp-carte">
+                <span class="stat-label">Tâches critiques</span>
+                <strong class="stat-value">{{ nb_critiques }}</strong>
+                <span class="stat-icon" aria-hidden="true">🎯</span>
+            </div>
+            <div class="stat-card stat-card--warning mp-carte">
+                <span class="stat-label">Chemins critiques</span>
+                <strong class="stat-value">{{ chemins_critiques|length }}</strong>
+                <span class="stat-icon" aria-hidden="true">🔗</span>
+            </div>
+        </div>
+
+        {% if chemins_critiques %}
+        <section class="card">
+            <div class="card-header">
+                <h2 class="card-title">Chemins critiques calculés</h2>
+                <span class="badge badge-info">{{ chemins_critiques|length }}</span>
+            </div>
+            <div class="card-body">
+                <ul>
+                    {% for chemin in chemins_critiques %}
+                    <li>{{ chemin|join(' → ') }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </section>
+        {% endif %}
+
+        <h2 class="section-title">Conseils tracés ({{ conseils|length }})</h2>
+        {% if conseils %}
+        <div class="card-grid">
+            {% for conseil in conseils %}
+            {% set classe_badge = 'badge-critical' if conseil.gravite == 'critical' else ('badge-warning' if conseil.gravite == 'warning' else 'badge-info') %}
+            {% set libelle_gravite = 'Critique' if conseil.gravite == 'critical' else ('Avertissement' if conseil.gravite == 'warning' else 'Information') %}
+            <section class="card mp-conseil" data-regle="{{ conseil.id_regle }}">
+                <div class="card-header">
+                    <h3 class="card-title">{{ conseil.titre }}</h3>
+                    <span class="badge {{ classe_badge }}">{{ libelle_gravite }}</span>
+                </div>
+                <div class="card-body">
+                    <p class="meta mp-meta">Règle {{ conseil.id_regle }}</p>
+                    <p>{{ conseil.explication }}</p>
+
+                    <div class="mp-preuve">
+                        <strong>Preuve (chiffres du moteur)</strong>
+                        <ul>
+                            {% for element in conseil.preuve.split(' ; ') %}
+                            <li>{{ element }}</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+
+                    <div class="mp-action">
+                        <strong>Action suggérée</strong>
+                        <p>{{ conseil.action }}</p>
+                    </div>
+                </div>
+            </section>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-state mp-vide">
+            Aucun conseil à afficher pour ce planning.
+        </div>
+        {% endif %}
+    </main>
+</div>
+</body>
+</html>

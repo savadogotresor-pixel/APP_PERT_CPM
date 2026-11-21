@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#1e3a8a">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <title>Mode hors ligne — PERT/CPM</title>
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.webmanifest') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='design.css') }}">
+</head>
+<body>
+<div class="app-shell">
+    <header class="topbar">
+        <a class="topbar-brand" href="/"><span class="topbar-brand-icon">📊</span> PERT/CPM</a>
+        <ul class="topbar-nav">
+            <li><a href="/demo">📊 Démo (12 tâches)</a></li>
+            <li><a href="/saisie">✏️ Saisie</a></li>
+            {% if not current_user.is_authenticated %}
+            <li><a href="{{ url_for('auth.login') }}">🔑 Connexion</a></li>
+            <li><a href="{{ url_for('auth.register') }}">📝 Inscription</a></li>
+            {% endif %}
+        </ul>
+    </header>
+
+    <main class="container">
+        <div class="page-header">
+            <div>
+                <h1 class="page-title">Mode hors ligne</h1>
+                <p class="page-subtitle">Votre planning reste utilisable, même sans connexion.</p>
+            </div>
+            <span id="offline-statut" class="badge badge-info" role="status">● Vérification de la connexion…</span>
+        </div>
+
+        <section class="card card-accent card-accent--primary">
+            <div class="card-header">
+                <h2 class="card-title">Ce qui est disponible, et ce qui ne l'est pas</h2>
+            </div>
+            <div class="card-body">
+                <p>
+                    Cette page est enregistrée sur votre appareil. Vous pouvez saisir des tâches
+                    simples et en calculer le chemin critique <strong>localement</strong> : aucune
+                    donnée n'est envoyée au serveur pour ce calcul. Les projets enregistrés ici
+                    restent dans votre navigateur jusqu'à leur synchronisation.
+                </p>
+                <div class="card-grid mt-4">
+                    <article class="card card-accent card-accent--success">
+                        <div class="card-body">
+                            <span class="badge badge-success">Hors connexion</span>
+                            <h3 class="card-title mt-3">✅ Disponible localement</h3>
+                            <p>
+                                Saisie des tâches, validation du graphe, durée totale, dates ES/EF/LS/LF,
+                                marges et chemin critique des <strong>petits projets</strong>, calculés
+                                par le moteur PERT/CPM embarqué. Les projets locaux sont conservés sur
+                                cet appareil (IndexedDB).
+                            </p>
+                        </div>
+                    </article>
+                    <article class="card card-accent card-accent--danger">
+                        <div class="card-body">
+                            <span class="badge badge-critical">Connexion requise</span>
+                            <h3 class="card-title mt-3">🌐 Nécessite Internet</h3>
+                            <p>
+                                L'<strong>assistant/conseiller IA</strong>, les <strong>projets partagés</strong>
+                                et la synchronisation, ainsi que les <strong>exports serveur</strong>
+                                (PDF, Excel, rapports), nécessitent une connexion. Vos calculs locaux
+                                restent accessibles en attendant le retour du réseau.
+                            </p>
+                        </div>
+                    </article>
+                </div>
+            </div>
+        </section>
+
+        <section class="card">
+            <div class="card-header">
+                <h2 class="card-title">🧮 Calcul local des tâches</h2>
+            </div>
+            <div class="card-body">
+                <p class="field-hint">
+                    Format attendu : une tâche par ligne — <code>nom;description;durée;dépendances</code>.
+                    Les dépendances sont les codes des tâches à terminer avant, séparés par des virgules.
+                </p>
+                <div class="field">
+                    <label for="nom-local">Nom du projet local :</label>
+                    <input type="text" id="nom-local" value="Projet local" maxlength="120">
+                </div>
+                <div class="field">
+                    <label for="taches-locales">Tâches :</label>
+                    <textarea id="taches-locales" rows="7" spellcheck="false">A;Analyse des besoins;3;
+B;Conception;4;A
+C;Intégration;2;B</textarea>
+                </div>
+                <div class="actions-bar">
+                    <button type="button" id="btn-calculer-local" class="btn btn-primary">🧮 Calculer localement</button>
+                    <button type="button" id="btn-enregistrer-local" class="btn btn-secondary">💾 Enregistrer sur cet appareil</button>
+                </div>
+                <p id="statut-local" class="meta" role="status"></p>
+            </div>
+        </section>
+
+        <section id="resultat-local" class="card card-accent card-accent--success" hidden>
+            <div class="card-header">
+                <h2 class="card-title">Résultat du calcul local</h2>
+            </div>
+            <div class="card-body">
+                <div class="stat-grid">
+                    <div class="stat-card stat-card--primary">
+                        <span class="stat-label">Durée totale :</span>
+                        <strong id="resultat-duree" class="stat-value">—</strong>
+                    </div>
+                    <div class="stat-card stat-card--danger">
+                        <span class="stat-label">Chemin critique :</span>
+                        <strong id="resultat-chemin" class="mt-2">—</strong>
+                    </div>
+                </div>
+                <p id="resultat-detail" class="meta"></p>
+            </div>
+        </section>
+
+        <section class="card">
+            <div class="card-header">
+                <h2 class="card-title">Projets enregistrés sur cet appareil</h2>
+                <button type="button" id="btn-sync" class="btn btn-primary btn-sm">🔄 Synchroniser</button>
+            </div>
+            <div class="card-body">
+                <p id="statut-sync" class="meta" role="status">
+                    La synchronisation n'envoie que le nom et les tâches des projets locaux.
+                </p>
+                <div class="table-wrapper">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Projet</th>
+                                <th>Tâches</th>
+                                <th>Modifié le</th>
+                                <th>État</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="liste-projets-locaux">
+                            <tr><td colspan="5" class="table-empty">Chargement des projets locaux…</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script src="{{ url_for('static', filename='pert-engine.js') }}"></script>
+    <script src="{{ url_for('static', filename='offline.js') }}"></script>
+    <script>
+    (function () {
+        "use strict";
+
+        var zone = document.getElementById("taches-locales");
+        var statut = document.getElementById("statut-local");
+        var resultat = document.getElementById("resultat-local");
+
+        function nettoie(valeur) {
+            return valeur.replace(/^\s+/, "").replace(/\s+$/, "");
+        }
+
+        function analyserTaches(texte) {
+            var taches = {};
+            var lignes = texte.split(/\r?\n/);
+            var i;
+            var j;
+            for (i = 0; i < lignes.length; i++) {
+                var ligne = nettoie(lignes[i]);
+                if (!ligne || ligne.charAt(0) === "#") {
+                    continue;
+                }
+                var champs = ligne.split(";");
+                var nom = nettoie(champs[0] || "");
+                if (!nom) {
+                    continue;
+                }
+                var duree = parseFloat((champs[2] || "0").replace(",", "."));
+                if (isNaN(duree)) {
+                    duree = 0;
+                }
+                var dependances = [];
+                var bruts = (champs[3] || "").split(",");
+                for (j = 0; j < bruts.length; j++) {
+                    var dep = nettoie(bruts[j]);
+                    if (dep) {
+                        dependances.push(dep);
+                    }
+                }
+                taches[nom] = {
+                    description: nettoie(champs[1] || ""),
+                    duree: duree,
+                    depend_de: dependances
+                };
+            }
+            return taches;
+        }
+
+        function serialiser(taches) {
+            if (typeof taches === "string") {
+                return taches;
+            }
+            var lignes = [];
+            if (!taches || typeof taches !== "object") {
+                return "";
+            }
+            for (var nom in taches) {
+                if (!Object.prototype.hasOwnProperty.call(taches, nom)) {
+                    continue;
+                }
+                var infos = taches[nom] || {};
+                var duree = typeof infos === "number" ? infos : infos.duree;
+                var description = typeof infos === "object" ? (infos.description || "") : "";
+                var dependances = typeof infos === "object" ? (infos.depend_de || []) : [];
+                if (!Array.isArray(dependances)) {
+                    dependances = [];
+                }
+                lignes.push(nom + ";" + description + ";" + duree + ";" + dependances.join(","));
+            }
+            return lignes.join("\n");
+        }
+
+        function afficherErreur(message) {
+            statut.textContent = message;
+            resultat.hidden = false;
+            document.getElementById("resultat-duree").textContent = "—";
+            document.getElementById("resultat-chemin").textContent = "—";
+            document.getElementById("resultat-detail").textContent = message;
+        }
+
+        function calculer() {
+            var taches = analyserTaches(zone.value);
+            if (!Object.keys(taches).length) {
+                afficherErreur("Saisissez au moins une tâche avant de calculer.");
+                return null;
+            }
+            if (!window.PertEngine) {
+                afficherErreur("Moteur local indisponible : rechargez la page depuis l'application.");
+                return null;
+            }
+            var erreurs = window.PertEngine.validate(taches);
+            if (erreurs.length) {
+                afficherErreur(erreurs.join(" · "));
+                return null;
+            }
+            try {
+                var sortie = window.PertEngine.compute(taches);
+                var chemins = sortie.chemins_critiques || [];
+                var texteChemins = chemins.length ? chemins.join(" | ") : "—";
+                document.getElementById("resultat-duree").textContent = sortie.duree_totale + " jours";
+                document.getElementById("resultat-chemin").textContent = texteChemins;
+                document.getElementById("resultat-detail").textContent =
+                    Object.keys(taches).length + " tâche(s) calculée(s) sur cet appareil · " +
+                    chemins.length + " chemin(s) critique(s). Aucune donnée n'a été envoyée au serveur.";
+                resultat.hidden = false;
+                statut.textContent = "Calcul terminé localement.";
+                return { taches: taches, sortie: sortie };
+            } catch (erreur) {
+                afficherErreur(erreur.message || String(erreur));
+                return null;
+            }
+        }
+
+        document.getElementById("btn-calculer-local").addEventListener("click", calculer, false);
+
+        document.getElementById("btn-enregistrer-local").addEventListener("click", function () {
+            if (!window.Offline) {
+                statut.textContent = "Stockage local indisponible.";
+                return;
+            }
+            var calcul = calculer();
+            if (!calcul) {
+                return;
+            }
+            var nom = nettoie(document.getElementById("nom-local").value) || "Projet local";
+            window.Offline.enregistrer({ nom: nom, taches: calcul.taches }).then(function (projet) {
+                statut.textContent = "Projet « " + projet.nom + " » enregistré sur cet appareil.";
+            })["catch"](function () {
+                statut.textContent = "Enregistrement local impossible (stockage indisponible).";
+            });
+        }, false);
+
+        document.getElementById("btn-sync").addEventListener("click", function () {
+            var sortieSync = document.getElementById("statut-sync");
+            if (!window.Offline) {
+                sortieSync.textContent = "Synchronisation indisponible.";
+                return;
+            }
+            sortieSync.textContent = "Synchronisation en cours…";
+            window.Offline.sync().then(function (rapport) {
+                if (rapport.horsLigne) {
+                    sortieSync.textContent = "Hors ligne : la synchronisation reprendra au retour de la connexion.";
+                } else {
+                    sortieSync.textContent = rapport.synchronises + " projet(s) synchronisé(s), " +
+                        rapport.echecs + " échec(s) sur " + rapport.total + " projet(s) en attente.";
+                }
+            })["catch"](function () {
+                sortieSync.textContent = "Synchronisation impossible pour le moment.";
+            });
+        }, false);
+
+        /* Hook utilisé par offline.js quand on clique sur « Charger ». */
+        window.chargerProjetLocal = function (projet) {
+            if (!projet) {
+                return;
+            }
+            zone.value = serialiser(projet.taches);
+            document.getElementById("nom-local").value = projet.nom || "Projet local";
+            resultat.hidden = true;
+            statut.textContent = "Projet « " + (projet.nom || "Projet local") + " » chargé : cliquez sur « Calculer localement ».";
+            if (zone.scrollIntoView) {
+                zone.scrollIntoView(true);
+            }
+        };
+    }());
+    </script>
+</div>
+</body>
+</html>
