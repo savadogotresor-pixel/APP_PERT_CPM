@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ titre }} — PERT/CPM</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        .mp-page { max-width: 720px; }
+        .mp-form { background: #fff; padding: 24px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+        .mp-champ { margin-bottom: 18px; }
+        .mp-champ label { display: block; font-weight: 600; margin-bottom: 6px; color: #374151; }
+        .mp-champ input, .mp-champ textarea { width: 100%; padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 6px; font: inherit; font-size: .95rem; background: #fff; }
+        .mp-champ textarea { min-height: 110px; resize: vertical; }
+        .mp-aide { font-size: .82rem; color: #6b7280; margin-top: 4px; }
+        .mp-btn { display: inline-block; background: #2563eb; color: #fff; padding: 10px 18px; border-radius: 6px; font-size: .9rem; font-weight: 600; text-decoration: none; border: 0; cursor: pointer; margin: 8px 8px 0 0; }
+        .mp-btn:hover { background: #1d4ed8; color: #fff; text-decoration: none; }
+        .mp-btn-secondary { background: #e5e7eb; color: #1f2937; }
+        .mp-btn-secondary:hover { background: #d1d5db; color: #111827; }
+        .mp-flash { padding: 10px 14px; border-radius: 6px; margin-bottom: 10px; font-size: .9rem; }
+        .mp-flash-success { background: #dcfce7; color: #166534; }
+        .mp-flash-error { background: #fee2e2; color: #991b1b; }
+        .mp-nav { justify-content: flex-end; }
+    </style>
+</head>
+<body>
+    <nav class="nav mp-nav">
+        <a href="{{ accueil_url }}">Accueil</a>
+        <a href="{{ url_for('projects.list_projects') }}">Mes projets</a>
+        {% if current_user.is_authenticated %}
+        <a href="{{ deconnexion_url }}">Déconnexion</a>
+        {% endif %}
+    </nav>
+
+    <main class="mp-page">
+        <h1>{{ titre }}</h1>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for categorie, message in messages %}
+                <div class="mp-flash mp-flash-{{ categorie }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <form class="mp-form" method="post" action="{{ action }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+            <div class="mp-champ">
+                <label for="name">Nom du projet *</label>
+                <input id="name" name="name" type="text" required maxlength="200"
+                       value="{{ valeurs.name }}" placeholder="Ex. Refonte du site web">
+            </div>
+
+            <div class="mp-champ">
+                <label for="description">Description</label>
+                <textarea id="description" name="description" placeholder="Objectifs, contexte, livrables…">{{ valeurs.description }}</textarea>
+            </div>
+
+            <div class="mp-champ">
+                <label for="date_reference">Date de référence</label>
+                <input id="date_reference" name="date_reference" type="date"
+                       value="{{ valeurs.date_reference or '' }}">
+                <p class="mp-aide">Format AAAA-MM-JJ. Elle sert de point de départ à l'estimation des dates de fin.</p>
+            </div>
+
+            <button class="mp-btn" type="submit">
+                {{ 'Enregistrer les modifications' if projet else 'Créer le projet' }}
+            </button>
+            <a class="mp-btn mp-btn-secondary" href="{{ url_for('projects.list_projects') }}">Annuler</a>
+        </form>
+    </main>
+</body>
+</html>

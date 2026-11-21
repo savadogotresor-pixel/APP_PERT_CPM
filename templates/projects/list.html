@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Mes projets — PERT/CPM</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        .mp-page { max-width: 1100px; }
+        .mp-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+        .mp-btn { display: inline-block; background: #2563eb; color: #fff; padding: 8px 14px; border-radius: 6px; font-size: .9rem; font-weight: 600; text-decoration: none; border: 0; cursor: pointer; margin: 4px 4px 4px 0; }
+        .mp-btn:hover { background: #1d4ed8; color: #fff; text-decoration: none; }
+        .mp-btn-secondary { background: #e5e7eb; color: #1f2937; }
+        .mp-btn-secondary:hover { background: #d1d5db; color: #111827; }
+        .mp-btn-warning { background: #d97706; }
+        .mp-btn-warning:hover { background: #b45309; }
+        .mp-btn-danger { background: #dc2626; }
+        .mp-btn-danger:hover { background: #b91c1c; }
+        .mp-inline { display: inline-flex; align-items: center; gap: 6px; margin: 0; }
+        .mp-confirm { font-size: .8rem; color: #4b5563; }
+        .mp-confirm input { width: 58px; padding: 5px 7px; border: 1px solid #d1d5db; border-radius: 4px; }
+        .mp-badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: .78rem; font-weight: 600; }
+        .mp-badge-actif { background: #dcfce7; color: #166534; }
+        .mp-badge-archive { background: #f3f4f6; color: #4b5563; }
+        .mp-table td, .mp-table th { vertical-align: middle; }
+        .mp-vide { background: #fff; padding: 24px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+        .mp-flash { padding: 10px 14px; border-radius: 6px; margin-bottom: 10px; font-size: .9rem; }
+        .mp-flash-success { background: #dcfce7; color: #166534; }
+        .mp-flash-error { background: #fee2e2; color: #991b1b; }
+        .mp-nav { justify-content: flex-end; }
+    </style>
+</head>
+<body>
+    <nav class="nav mp-nav">
+        <a href="{{ accueil_url }}">Accueil</a>
+        <a href="{{ url_for('projects.list_projects') }}">Mes projets</a>
+        {% if current_user.is_authenticated %}
+        <a href="{{ deconnexion_url }}">Déconnexion</a>
+        {% endif %}
+    </nav>
+
+    <main class="mp-page">
+        <div class="mp-head">
+            <h1>Mes projets</h1>
+            <a class="mp-btn" href="{{ url_for('projects.new_project') }}">➕ Nouveau projet</a>
+        </div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for categorie, message in messages %}
+                <div class="mp-flash mp-flash-{{ categorie }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        {% if lignes %}
+        <table class="mp-table">
+            <thead>
+                <tr>
+                    <th>Projet</th>
+                    <th>Description</th>
+                    <th>Date de référence</th>
+                    <th>Tâches</th>
+                    <th>Durée totale</th>
+                    <th>Statut</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for ligne in lignes %}
+                {% set projet = ligne.projet %}
+                {% set archive = projet.status == 'archive' %}
+                <tr>
+                    <td><strong><a href="{{ url_for('projects.detail', project_id=projet.id) }}">{{ projet.name }}</a></strong></td>
+                    <td>{{ projet.description or '—' }}</td>
+                    <td>{{ projet.date_reference or '—' }}</td>
+                    <td>{{ ligne.nb_taches }}</td>
+                    <td>
+                        {% if ligne.duree_totale is none %}—
+                        {% else %}{{ ligne.duree_totale }} j{% endif %}
+                    </td>
+                    <td>
+                        <span class="mp-badge mp-badge-{{ 'archive' if archive else 'actif' }}">
+                            {{ 'Archivé' if archive else 'Actif' }}
+                        </span>
+                    </td>
+                    <td>
+                        <a class="mp-btn mp-btn-secondary" href="{{ url_for('projects.detail', project_id=projet.id) }}">Voir</a>
+                        <a class="mp-btn mp-btn-secondary" href="{{ url_for('projects.edit_project', project_id=projet.id) }}">Modifier</a>
+                        <form class="mp-inline" method="post" action="{{ url_for('projects.unarchive_project' if archive else 'projects.archive_project', project_id=projet.id) }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button class="mp-btn mp-btn-warning" type="submit">{{ 'Désarchiver' if archive else 'Archiver' }}</button>
+                        </form>
+                        <form class="mp-inline" method="post" action="{{ url_for('projects.delete_project', project_id=projet.id) }}" onsubmit="return confirm('Supprimer définitivement ce projet ?');">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <label class="mp-confirm">oui
+                                <input type="text" name="confirm" placeholder="oui" title="Saisissez oui pour confirmer">
+                            </label>
+                            <button class="mp-btn mp-btn-danger" type="submit">Supprimer</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="mp-vide">
+            <p>Aucun projet pour le moment.</p>
+            <p><a class="mp-btn" href="{{ url_for('projects.new_project') }}">Créer mon premier projet</a></p>
+        </div>
+        {% endif %}
+    </main>
+</body>
+</html>

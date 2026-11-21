@@ -9,12 +9,44 @@ from openpyxl import Workbook
 from openpyxl.styles import PatternFill
 from openpyxl.drawing.image import Image as XLImage
 
+from config import Config  # noqa: F401 - rend la configuration explicite à l'import
+from extensions import db, login_manager, csrf
 from logic.calcul import generer_conseils
 from logic.data import taches, parser_taches
 from logic.pert import compute, ValidationError
+from models import User, init_db
+from routes_auth import auth_bp
+from routes_projects import projects_bp
 
 app = Flask(__name__)
+# APP_SETTINGS permet de sélectionner la configuration (ex. "config.TestConfig").
+app.config.from_object(os.environ.get('APP_SETTINGS', 'config.Config'))
 app.config['MAX_CONTENT_LENGTH'] = 8 * 1024 * 1024
+
+db.init_app(app)
+login_manager.init_app(app)
+login_manager.login_view = 'auth.login'
+login_manager.login_message = 'Veuillez vous connecter pour accéder à cette page.'
+csrf.init_app(app)
+
+app.register_blueprint(auth_bp)
+app.register_blueprint(projects_bp)
+
+
+@login_manager.user_loader
+def charger_utilisateur(user_id):
+    """Recharge l'utilisateur connecté depuis la session (Flask-Login)."""
+    try:
+        return db.session.get(User, int(user_id))
+    except (TypeError, ValueError):
+        return None
+
+
+try:
+    init_db(app)
+except Exception:
+    # Une base indisponible ne doit pas empêcher le démarrage de l'application.
+    app.logger.exception("Impossible d'initialiser la base de données au démarrage.")
 
 PREFIXE_PNG = "data:image/png;base64,"
 PREFIXES_FORMULE = ("=", "+", "-", "@")
@@ -323,6 +355,15 @@ def erreur_interne(erreur):
         'erreur.html',
         erreurs=["Une erreur interne est survenue (500). Veuillez réessayer plus tard."]
     ), 500
+
+
+# Les pages historiques (/saisie, /resultats_custom, /export_excel) n'embarquent
+# pas encore de jeton CSRF : elles restent exemptées pour préserver leur comportement.
+csrf.exempt(app.view_functions['resultats_custom'])
+csrf.exempt(app.view_functions['export_excel'])
+# Marqueur d'introspection (certaines versions de Flask-WTF ne le posent pas).
+app.view_functions['resultats_custom'].csrf_exempt = True
+app.view_functions['export_excel'].csrf_exempt = True
 
 
 if __name__ == '__main__':

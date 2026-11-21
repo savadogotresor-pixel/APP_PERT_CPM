@@ -11,6 +11,14 @@
         <a href="/">🏠 Accueil</a>
         <a href="/demo">📊 Démo (12 tâches)</a>
         <a href="/saisie">✏️ Saisie des tâches</a>
+        <a href="{{ url_for('auth.profile') }}">👤 Mon compte</a>
+        <a href="{{ url_for('projects.list_projects') }}">📁 Mes projets</a>
+        {% if current_user.is_authenticated %}
+        <a href="{{ url_for('auth.logout') }}">🚪 Déconnexion</a>
+        {% else %}
+        <a href="{{ url_for('auth.login') }}">🔑 Connexion</a>
+        <a href="{{ url_for('auth.register') }}">✍️ Inscription</a>
+        {% endif %}
     </nav>
 
     <h1>Saisir vos propres tâches</h1>
