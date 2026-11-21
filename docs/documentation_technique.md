@@ -3,7 +3,7 @@
 **Date :** 21 novembre 2026  
 **Version du document :** 1.0  
 **Références :** `docs/Cahier_des_charges_PERT_CPM_PRO.docx` (v1.0), `docs/convention_calcul.md`, `docs/audit.md`, `docs/plan_implementation.md`.  
-**État du livrable :** lots 0 à 6 livrés (moteur certifié, socle sécurisé, persistance, espace projets/tâches, visualisations, optimisation, exports serveur). Le blueprint d'administration (`routes_admin.py`) est en cours de finalisation par un autre agent ; les fonctions IA du chapitre 19 du cahier ne sont pas implémentées.  
+**État du livrable :** lots 0 à 6 livrés (moteur certifié, socle sécurisé, persistance, espace projets/tâches, visualisations, optimisation, exports serveur) et lot IA-1 livré (assistant conversationnel, §19). Le blueprint d'administration (`routes_admin.py`) reste en cours de finalisation par un autre agent.  
 **Application déployée :** <https://app-pert-cpm.onrender.com/> — supervision : `GET /health`.
 
 > Ce document décrit le code tel qu'il existe dans le dépôt. Toute divergence constatée avec l'application déployée doit être consignée dans `docs/audit.md` avant d'être corrigée.
@@ -58,6 +58,8 @@ Lecture du schéma :
 | `models.py` | Entités `User`, `Project`, `Task`, `Dependency`, `ProjectAccess`, `Scenario`, `AuditLog` ; hachage des mots de passe ; `project_to_taches()` ; `user_can_access()` ; `init_db()` (`db.create_all()`). |
 | `routes_auth.py` | Blueprint `auth` : inscription, connexion, déconnexion, profil ; validation serveur, messages génériques, filtrage de `next` contre les redirections ouvertes. |
 | `routes_projects.py` | Blueprint `projects` (préfixe `/projects`) : CRUD projets/tâches, archivage, import/export, rapport PDF, scénarios d'optimisation, journalisation des actions. |
+| `routes_ia.py` | Blueprint `ia` (préfixe `/ia`) : interface conversationnelle, contrôle d'accès avant construction du contexte, historique de session (20 messages), limitation d'usage, audit `IA_ASSISTANT`, fallback déterministe si le service est absent. |
+| `services/ia.py` | Service IA : `est_disponible()`, `repondre()`, `configuration()` ; clé API côté serveur, timeout, fallback interne et traçabilité des données utilisées. |
 | `routes_admin.py` *(en cours)* | Blueprint `admin` (préfixe `/admin`) : tableau de bord, gestion du rôle administrateur, consultation du journal. Enregistrement conditionnel dans `app.py` (`try: from routes_admin import admin_bp`). |
 | `logic/pert.py` | Moteur canonique : validation, tri topologique de Kahn, passes avant/arrière, marges, criticité à `EPSILON = 1e-9`, énumération de **tous** les chemins critiques. Lève `ValidationError`. |
 | `logic/calcul.py` | Façade de compatibilité (`passe_avant`, `passe_arriere`, `calculer_marges`, `generer_conseils`, réexport du moteur). |
@@ -164,6 +166,12 @@ Relations fonctionnelles :
 | `APP_SETTINGS` | `config.Config` | Classe de configuration Python : `config.Config`, `config.ProductionConfig` (recommandé en prod) ou `config.TestConfig`. |
 | `FLASK_DEBUG` | non défini | `1` active le debug et le niveau de journal `DEBUG` en **développement uniquement** ; jamais en production. |
 | `PORT` | — | Fourni par Render ; utilisé par la commande de démarrage gunicorn (`--bind 0.0.0.0:$PORT`). |
+| `IA_ENABLED` | `1` | `0` force le mode sans IA (aucun appel externe, réponses déterministes). |
+| `IA_API_KEY` | non défini | Clé du fournisseur IA, **côté serveur uniquement** ; sans clé, le mode sans IA est actif. Jamais exposée dans un template ou un JSON. |
+| `IA_API_URL` | `https://api.openai.com/v1/chat/completions` | Point d'accès HTTP du fournisseur. |
+| `IA_MODEL` | `gpt-4o-mini` | Modèle utilisé pour les réponses. |
+| `IA_TIMEOUT` | `10.0` | Délai maximal (secondes) d'un appel au fournisseur. |
+| `IA_MAX_APPELS_PAR_HEURE` | `60` | Nombre maximal de questions par heure et par utilisateur. |
 
 Paramètres figés dans le code : `MAX_CONTENT_LENGTH = 8 Mo`, `SQLALCHEMY_TRACK_MODIFICATIONS = False`, `WTF_CSRF_ENABLED = True` (False sous `TestConfig`), `ProxyFix(x_for=1, x_proto=1, x_host=1)`, journalisation sur stdout.
 
@@ -229,7 +237,17 @@ Le blueprint définit le préfixe `/admin` et le décorateur `admin_required` (`
 | POST | `/admin/utilisateurs/<int:user_id>/admin` | admin | Octroi / retrait du rôle admin ; l'auto-rétrogradation est refusée et journalisée. |
 | GET | `/admin/journal?action=...` | admin | 100 dernières entrées d'audit, filtre optionnel par action. |
 
-### 5.5 Gestion des erreurs
+### 5.5 Assistant IA (blueprint `ia` — lot IA-1)
+
+Toutes les routes du projet exigent une session authentifiée et `user_can_access()` est vérifié **avant** tout accès aux données du projet (403 sinon).
+
+| Méthode | Chemin | Description |
+|---|---|---|
+| GET | `/ia/statut` | JSON public : disponibilité, modèle, limite d'appels par heure. Aucune clé API. |
+| GET | `/ia/projets/<int:project_id>/assistant` | Interface conversationnelle : historique de session, synthèse calculée, bandeau de transparence. |
+| POST | `/ia/projets/<int:project_id>/assistant` | Question JSON (`{question, historique?}`) ou formulaire ; réponse vérifiée, audit et historique mis à jour. Protégé par le jeton CSRF global. |
+
+### 5.6 Gestion des erreurs
 
 | Code | Comportement |
 |---|---|
@@ -335,3 +353,19 @@ Points de vigilance : la limitation des tentatives de connexion prévue au §11 
 7. **Déployer** : pousser le commit sur la branche configurée dans Render ou relancer le déploiement manuel ; surveiller les journaux de build et de démarrage.
 8. **Vérifier** : `GET /health`, connexion, ouverture d'un projet, calcul, export PDF, puis contrôle des erreurs dans `/admin/journal`. En cas d'échec, appliquer la procédure de rollback de `docs/deploiement.md`.
 9. **Clore** : mettre à jour le registre des sauvegardes et la fiche de recette ; archiver la preuve de restauration si le schéma a changé.
+
+## 19. Assistant IA (lot IA-1)
+
+### 19.1 Service et contrat
+
+`services/ia.py` expose trois fonctions : `est_disponible()`, `repondre(question, taches, resultats, duree_totale, chemins_critiques, historique=None, successeurs=None)` et `configuration()`. `repondre()` renvoie un dictionnaire avec `texte`, `source` (`moteur` ou `ia`), `donnees_utilisees`, `donnees_manquantes`, `avertissements`, `horodatage`, `appel_ia` et `tokens`. Une panne du fournisseur ne lève jamais d'exception : le service bascule sur son fallback déterministe interne. `routes_ia.py` tolère l'absence du module pendant le chantier et fournit alors le même type de réponse, calculée uniquement à partir des résultats du moteur PERT/CPM (zéro chiffre inventé).
+
+### 19.2 Mode sans IA et confidentialité
+
+Sans clé `IA_API_KEY`, avec `IA_ENABLED=0` ou si le fournisseur est injoignable, le **mode sans IA** est actif : l'interface l'indique explicitement et les réponses sont produites localement. Le bandeau de l'assistant rappelle que seuls les codes, durées, descriptions et résultats calculés du projet sont transmis ; aucun mot de passe ni secret ne l'est. La clé API n'est lue que depuis la configuration serveur et n'apparaît dans aucun template ni JSON (`/ia/statut` ne renvoie que disponibilité, modèle et limite).
+
+### 19.3 Limitation, historique et audit
+
+La limitation d'usage est en mémoire, par utilisateur et par heure (`IA_MAX_APPELS_PAR_HEURE`), avec réponse JSON 429 au-delà de la limite ; elle est **par processus** : avec plusieurs workers gunicorn, chaque worker compte ses propres appels et la limite effective est multipliée par le nombre de workers. Un backend partagé (Redis, base de données) serait nécessaire pour une limite globale.
+
+L'historique est conservé côté serveur dans la session Flask (`ia_historique`), par projet, limité aux 20 derniers messages dont le texte est tronqué à 500 caractères ; un `historique` envoyé par le client est ignoré. L'audit `IA_ASSISTANT` n'enregistre que `project_id`, `source`, `appel_ia` et `tokens` : ni question, ni réponse complète. Les POST sont protégés par le jeton CSRF global transmis dans l'en-tête `X-CSRFToken`.

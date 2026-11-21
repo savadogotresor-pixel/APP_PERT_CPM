@@ -21,6 +21,10 @@ from logic.pert import compute, ValidationError
 from models import User, init_db
 from routes_auth import auth_bp
 from routes_projects import projects_bp
+try:
+    from routes_ia import ia_bp
+except ImportError:
+    ia_bp = None
 
 app = Flask(__name__)
 # APP_SETTINGS permet de sélectionner la configuration (ex. "config.TestConfig").
@@ -48,6 +52,11 @@ csrf.init_app(app)
 
 app.register_blueprint(auth_bp)
 app.register_blueprint(projects_bp)
+
+if ia_bp is not None:
+    app.register_blueprint(ia_bp)
+else:
+    app.logger.info("routes_ia indisponible : blueprint /ia non enregistré.")
 
 try:
     from routes_admin import admin_bp

@@ -18,6 +18,17 @@ class Config:
     MAX_CONTENT_LENGTH = 8 * 1024 * 1024
     WTF_CSRF_ENABLED = True
 
+    # Assistant IA (§19) : la clé reste exclusivement côté serveur. Elle n'est
+    # jamais sérialisée dans un template, un JSON ou le journal d'audit.
+    IA_API_KEY = os.environ.get('IA_API_KEY')
+    IA_API_URL = os.environ.get(
+        'IA_API_URL', 'https://api.openai.com/v1/chat/completions'
+    )
+    IA_MODEL = os.environ.get('IA_MODEL', 'gpt-4o-mini')
+    IA_TIMEOUT = float(os.environ.get('IA_TIMEOUT', '10.0'))
+    IA_ENABLED = os.environ.get('IA_ENABLED', '1') != '0'
+    IA_MAX_APPELS_PAR_HEURE = int(os.environ.get('IA_MAX_APPELS_PAR_HEURE', '60'))
+
 
 class _SecretProduction:
     """Descriptor : exige une variable d'environnement au moment de sa lecture.

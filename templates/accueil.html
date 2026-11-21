@@ -12,6 +12,8 @@
         <a href="/saisie">✏️ Saisie des tâches</a>
         <a href="{{ url_for('auth.profile') }}">👤 Mon compte</a>
         <a href="{{ url_for('projects.list_projects') }}">📁 Mes projets</a>
+        {% set lien_assistant = assistant_url|default(url_for('projects.list_projects'), true) %}
+        <a href="{{ lien_assistant }}">🤖 Assistant IA</a>
         {% if current_user.is_authenticated and current_user.is_admin %}
         <a href="{{ url_for('admin.index') }}">🛠️ Administration</a>
         {% endif %}
