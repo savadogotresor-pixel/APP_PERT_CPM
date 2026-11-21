@@ -1,15 +1,119 @@
 /* ===== Page de résultats ===== */
 
+#contenu-export {
+    overflow-x: auto;
+}
+
+table {
+    width: 100%;
+    min-width: 760px;
+}
+
 #graphe {
     width: 100%;
     max-width: 100%;
-    height: 500px;
+    height: min(500px, 60vh);
     border: 1px solid #ccc;
 }
 
 #gantt-container {
     width: 100%;
     overflow-x: auto;
+}
+
+/* Bouton de rafraîchissement des visualisations */
+#btn-actualiser {
+    margin: .5rem 0;
+}
+
+/* Zoom du diagramme de Gantt */
+.controles-gantt {
+    display: flex;
+    gap: .4rem;
+    margin: .5rem 0 1rem;
+    flex-wrap: wrap;
+}
+
+.controles-gantt button.actif {
+    background: #2563eb;
+    color: white;
+}
+
+/* Fiche détaillée d'une tâche (affichée au clic sur un nœud du graphe) */
+.fiche-tache {
+    position: fixed;
+    top: 80px;
+    right: 24px;
+    z-index: 1000;
+    width: min(360px, calc(100vw - 32px));
+    max-height: calc(100vh - 110px);
+    overflow-y: auto;
+    background: white;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, .2);
+    padding: 16px 20px;
+    font-size: .9rem;
+}
+
+.fiche-tache button#fiche-fermer {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    font-size: 1.1rem;
+}
+
+.fiche-tache h2 {
+    margin: 0 24px 12px 0;
+    font-size: 1.1rem;
+}
+
+.fiche-tache p {
+    margin: 6px 0;
+}
+
+[hidden] {
+    display: none !important;
+}
+
+/* Ajustements pour les petits écrans */
+@media (max-width: 768px) {
+    #graphe {
+        height: 380px;
+    }
+
+    nav.nav {
+        flex-wrap: wrap;
+    }
+
+    body {
+        font-size: .9rem;
+    }
+
+    h1 {
+        font-size: 1.4rem;
+    }
+
+    h2 {
+        font-size: 1.15rem;
+    }
+
+    table {
+        font-size: .8rem;
+    }
+
+    .aide p, .aide ul {
+        font-size: .82rem;
+    }
+
+    .fiche-tache {
+        top: 12px;
+        right: 12px;
+        padding: 12px 16px;
+    }
 }
 
 /* Ligne du tableau correspondant à une tâche du chemin critique */

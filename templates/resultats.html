@@ -32,6 +32,8 @@
     <p>Chemin critique : <strong>{{ chemin_critique | join(' → ') }}</strong></p>
     <p>Chemins critiques ({{ chemins_critiques | default([]) | length }}) : <strong>{% for chemin in chemins_critiques | default([]) %}{{ chemin | join(' → ') }}{% if not loop.last %} | {% endif %}{% endfor %}</strong></p>
 
+    <button id="btn-actualiser" type="button" onclick="actualiserVisualisations()">🔄 Actualiser les visualisations</button>
+
     <div id="contenu-export">
 
         <table border="1" cellpadding="6">
@@ -132,16 +134,108 @@
                 afficher le détail de ses dates.
             </p>
         </details>
+        <div class="controles-gantt">
+            <button type="button" data-vue="Day">Jour</button>
+            <button type="button" data-vue="Week">Semaine</button>
+            <button type="button" data-vue="Month">Mois</button>
+            <button type="button" data-vue="Quarter">Trimestre</button>
+        </div>
         <div id="gantt-container">
             <svg id="gantt"></svg>
         </div>
 
     </div>
 
+    {# Données construites ici pour la fiche tâche et la mise en évidence des arcs critiques #}
+    {% set fiches_taches = {} %}
+    {% for nom, r in resultats.items() %}
+        {% set tache = taches[nom] %}
+        {% set _ = fiches_taches.update({nom: {
+            'description': tache.description,
+            'duree': tache.duree,
+            'ES': r.ES,
+            'EF': r.EF,
+            'LS': r.LS,
+            'LF': r.LF,
+            'marge': r.marge,
+            'marge_libre': r.marge_libre,
+            'critique': r.critique,
+            'predecesseurs': tache.depend_de
+        }}) %}
+    {% endfor %}
+
+    {% set arcs_critiques = [] %}
+    {% set chemins = chemins_critiques | default([]) %}
+    {% for chemin in chemins | default([]) %}
+        {% for i in range((chemin | length) - 1) %}
+            {% set _ = arcs_critiques.append(chemin[i] ~ '→' ~ chemin[i+1]) %}
+        {% endfor %}
+    {% endfor %}
+    {% set arcs_critiques = arcs_critiques | unique | list %}
+
+    <aside id="fiche-tache" class="fiche-tache" hidden>
+        <button id="fiche-fermer" type="button">✕</button>
+        <h2>Fiche tâche</h2>
+        <p><strong>Code :</strong> <span id="fiche-code"></span></p>
+        <p><strong>Description :</strong> <span id="fiche-description"></span></p>
+        <p><strong>Durée :</strong> <span id="fiche-duree"></span></p>
+        <p><strong>Dates :</strong> <span id="fiche-dates"></span></p>
+        <p><strong>Marges :</strong> <span id="fiche-marges"></span></p>
+        <p><strong>Criticité :</strong> <span id="fiche-criticite"></span></p>
+        <p><strong>Prédécesseurs :</strong> <span id="fiche-predecesseurs"></span></p>
+    </aside>
+
     <script src="https://unpkg.com/vis-network@9.1.9/standalone/umd/vis-network.min.js"></script>
     <script>
+        const FICHES_TACHES = {{ fiches_taches | tojson }};
+        const ARCS_CRITIQUES = {{ arcs_critiques | tojson }};
+
         const nodes = new vis.DataSet({{ nodes | tojson }});
         const edges = new vis.DataSet({{ edges | tojson }});
+
+        const ficheTache = document.getElementById('fiche-tache');
+        let codeFicheActive = null;
+
+        function appliquerStylesArcs() {
+            const misesAJour = edges.get().map(function (edge) {
+                const estCritique = ARCS_CRITIQUES.includes(edge.from + '→' + edge.to);
+                return {
+                    id: edge.id,
+                    color: estCritique
+                        ? { color: '#ef4444', highlight: '#dc2626', inherit: false }
+                        : { color: '#9ca3af', inherit: false },
+                    width: estCritique ? 3 : 1
+                };
+            });
+            edges.update(misesAJour);
+        }
+        appliquerStylesArcs();
+
+        function masquerFiche() {
+            ficheTache.hidden = true;
+            codeFicheActive = null;
+        }
+
+        function afficherFiche(code) {
+            const tache = FICHES_TACHES[code];
+            if (!tache) {
+                masquerFiche();
+                return;
+            }
+            codeFicheActive = code;
+            document.getElementById('fiche-code').textContent = code;
+            document.getElementById('fiche-description').textContent = tache.description || '';
+            document.getElementById('fiche-duree').textContent = String(tache.duree) + ' j';
+            document.getElementById('fiche-dates').textContent =
+                'ES : ' + tache.ES + ' | EF : ' + tache.EF + ' | LS : ' + tache.LS + ' | LF : ' + tache.LF;
+            document.getElementById('fiche-marges').textContent =
+                'Marge totale : ' + tache.marge + ' | Marge libre : ' + tache.marge_libre;
+            document.getElementById('fiche-criticite').textContent =
+                tache.critique ? 'Critique (marge nulle)' : 'Non critique';
+            document.getElementById('fiche-predecesseurs').textContent =
+                (tache.predecesseurs || []).join(', ') || 'Aucun';
+            ficheTache.hidden = false;
+        }
 
         const container = document.getElementById('graphe');
         const data = { nodes: nodes, edges: edges };
@@ -150,7 +244,17 @@
             edges: { arrows: "to" },
             physics: false
         };
-        new vis.Network(container, data, options);
+        const reseau = new vis.Network(container, data, options);
+
+        reseau.on('click', function (params) {
+            if (params.nodes.length === 0) {
+                masquerFiche();
+                return;
+            }
+            afficherFiche(params.nodes[0]);
+        });
+
+        document.getElementById('fiche-fermer').addEventListener('click', masquerFiche);
     </script>
 
     <script src="https://cdn.jsdelivr.net/npm/frappe-gantt@0.6.1/dist/frappe-gantt.min.js"></script>
@@ -166,7 +270,7 @@
                 .replace(/'/g, '&#39;');
         }
 
-        new Gantt("#gantt", tachesGantt, {
+        const gantt = new Gantt("#gantt", tachesGantt, {
             view_mode: 'Day',
             date_format: 'YYYY-MM-DD',
             language: 'fr',
@@ -184,6 +288,25 @@
                 </div>`;
             }
         });
+
+        document.querySelector('.controles-gantt button[data-vue]').classList.add('actif');
+
+        document.querySelectorAll('.controles-gantt button[data-vue]').forEach(function (bouton) {
+            bouton.addEventListener('click', function () {
+                gantt.change_view_mode(bouton.dataset.vue);
+                document.querySelectorAll('.controles-gantt button[data-vue]').forEach(function (b) {
+                    b.classList.toggle('actif', b === bouton);
+                });
+            });
+        });
+
+        function actualiserVisualisations() {
+            reseau.redraw();
+            appliquerStylesArcs();
+            if (!ficheTache.hidden && codeFicheActive) {
+                afficherFiche(codeFicheActive);
+            }
+        }
     </script>
 
     <button onclick="exporterPDF()">📄 Télécharger en PDF</button>
