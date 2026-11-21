@@ -368,4 +368,17 @@ Sans clé `IA_API_KEY`, avec `IA_ENABLED=0` ou si le fournisseur est injoignable
 
 La limitation d'usage est en mémoire, par utilisateur et par heure (`IA_MAX_APPELS_PAR_HEURE`), avec réponse JSON 429 au-delà de la limite ; elle est **par processus** : avec plusieurs workers gunicorn, chaque worker compte ses propres appels et la limite effective est multipliée par le nombre de workers. Un backend partagé (Redis, base de données) serait nécessaire pour une limite globale.
 
-L'historique est conservé côté serveur dans la session Flask (`ia_historique`), par projet, limité aux 20 derniers messages dont le texte est tronqué à 500 caractères ; un `historique` envoyé par le client est ignoré. L'audit `IA_ASSISTANT` n'enregistre que `project_id`, `source`, `appel_ia` et `tokens` : ni question, ni réponse complète. Les POST sont protégés par le jeton CSRF global transmis dans l'en-tête `X-CSRFToken`.
+L'historique est conservé côté serveur dans la session Flask (`ia_historique`), par projet, limité aux 20 derniers messages dont le texte est tronqué à 500 caractères ; un `historique` envoyé par le client est ignoré. L'audit `IA_ASSISTANT` n'enregistre que `project_id`, `source`, `appel_ia` et `tokens` : ni question, ni réponse complète.
+
+### 19.4 Génération WBS et optimisation assistée
+
+Deux entrées complètent l'assistant conversationnel :
+
+| Méthode | Chemin | Description |
+|---|---|---|
+| GET, POST | `/ia/projets/nouveau` | Génération WBS : `etape=generer` produit un aperçu éditable sans écriture ; `etape=enregistrer` crée le projet après revalidation serveur et confirmation explicite (`confirmer=oui`). |
+| GET | `/projects/<int:project_id>/optimisation/assistee` | Optimisation assistée : scénarios calculés et présentés comme des hypothèses, sans modification du planning de référence. |
+
+La génération WBS est déterministe et locale (`services/wbs.py`, source `regles`) : aucune clé API ni appel réseau. Les phases, livrables, durées et dépendances proposés sont **indicatifs et non garantis** ; le bandeau de l'aperçu le rappelle et l'utilisateur doit modifier puis valider chaque tâche. Les champs `code_<i>`, `description_<i>`, `duree_<i>` et `predecesseurs_<i>` sont relus côté serveur à l'enregistrement, puis contrôlés par `valider_proposition()` (codes uniques, durées ≥ 0, prédécesseurs existants, absence de cycles via `logic.pert.compute`). Aucune donnée n'est enregistrée sans la case de confirmation explicite : sans `confirmer=oui`, l'aperçu est simplement réaffiché avec un message d'erreur et zéro écriture.
+
+La limitation d'usage suit le même mécanisme en mémoire que l'assistant (`IA_MAX_APPELS_PAR_HEURE`) et s'applique aux générations. La création effective écrit un `AuditLog(action='IA_WBS_CREATION')` contenant `project_id`, `nb_taches` et `source`, sans contenu sensible. Le blueprint `optimisation_ia` est enregistré conditionnellement dans `app.py` ; le lien de la page de détail reste présent pendant sa livraison et retombe sur la simulation classique tant qu'il est absent. Dans tous les cas, les scénarios d'optimisation sont des propositions : le planning de référence n'est jamais modifié sans action explicite de l'utilisateur. Les POST sont protégés par le jeton CSRF global transmis dans l'en-tête `X-CSRFToken`.

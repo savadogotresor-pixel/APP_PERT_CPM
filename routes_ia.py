@@ -19,6 +19,7 @@ Règles de sécurité appliquées ici :
 from __future__ import annotations
 
 import logging
+import re
 import threading
 import time
 from datetime import datetime, timezone
@@ -39,7 +40,14 @@ from flask_login import current_user, login_required
 
 from extensions import db
 from logic.pert import ValidationError, compute
-from models import AuditLog, Project, project_to_taches, user_can_access
+from models import (
+    AuditLog,
+    Dependency,
+    Project,
+    Task,
+    project_to_taches,
+    user_can_access,
+)
 
 try:  # Werkzeug >= 2.1
     from werkzeug.routing.exceptions import BuildError
@@ -56,6 +64,13 @@ except Exception:  # service en cours de livraison ou dépendance manquante
     est_disponible = None
     repondre = None
 
+try:
+    from services.wbs import generer_wbs, valider_proposition
+except Exception:  # service livré en parallèle : l'app doit toujours démarrer
+    logger.warning("services.wbs indisponible : génération WBS désactivée.", exc_info=True)
+    generer_wbs = None
+    valider_proposition = None
+
 
 ia_bp = Blueprint('ia', __name__, url_prefix='/ia')
 
@@ -63,6 +78,12 @@ HISTORIQUE_MAX = 20
 TEXTE_MAX = 500
 FENETRE_SECONDES = 3600
 LIMITE_DEFAUT = 60
+
+# Génération WBS (lot IA-2) : bornes des champs libres et du nom du projet.
+WBS_OBJECTIF_MAX = 500
+WBS_CONTRAINTES_MAX = 1000
+WBS_TEXTE_MAX = 2000
+WBS_NOM_PROJET_MAX = 120
 
 _compteurs_lock = threading.Lock()
 _appels_par_utilisateur = {}  # {identifiant utilisateur: [horodatages time.time()]}
@@ -315,6 +336,239 @@ def _consommer_appel(identifiant, limite):
         return True
 
 
+# ---------------------------------------------------------------------------
+# Génération WBS (lot IA-2) : helpers de formulaire et d'aperçu
+# ---------------------------------------------------------------------------
+
+def _texte_wbs(valeur, limite):
+    """Normalise un champ libre non fiable (une ligne, longueur bornée)."""
+    chaine = '' if valeur is None else str(valeur)
+    chaine = ''.join(c for c in chaine if c in '\t' or ord(c) >= 32)
+    return chaine.strip()[:limite]
+
+
+def _liste_predecesseurs(brut):
+    """Convertit « A, B » en liste ordonnée de codes non vides."""
+    if brut is None:
+        return []
+    resultat = []
+    for morceau in str(brut).split(','):
+        propre = morceau.strip()
+        if propre and propre not in resultat:
+            resultat.append(propre)
+    return resultat
+
+
+def _indices_taches(form):
+    """Indices globaux des tâches soumises, déduits des seuls champs code_*."""
+    indices = set()
+    for cle in form.keys():
+        correspondance = re.fullmatch(r'code_(\d+)', str(cle))
+        if correspondance:
+            indices.add(int(correspondance.group(1)))
+    return sorted(indices)
+
+
+def _avertissements_formulaire(form):
+    """Relit les avertissements affichés dans l'aperçu (affichage uniquement)."""
+    avertissements = []
+    for cle in sorted(form.keys(), key=str):
+        correspondance = re.fullmatch(r'avertissement_(\d+)', str(cle))
+        if correspondance:
+            texte = _texte_wbs(form.get(cle), WBS_TEXTE_MAX)
+            if texte:
+                avertissements.append(texte)
+    return avertissements
+
+
+def _reconstruire_wbs(form, objectif, contraintes):
+    """Reconstruit la WBS soumise en relisant TOUS les champs de chaque tâche.
+
+    Les champs cachés ne servent qu'aux métadonnées d'affichage (phases,
+    livrables, hypothèses). La validation porte exclusivement sur les quatre
+    champs éditables relus ici : code, description, durée, prédécesseurs.
+    """
+    phases = {}
+    ordre_phases = []
+
+    for index in _indices_taches(form):
+        phase_brute = (form.get(f'phase_index_{index}') or '0').strip()
+        try:
+            phase_index = int(phase_brute)
+        except ValueError:
+            phase_index = 0
+        nom_phase = _texte_wbs(form.get(f'phase_{index}'), 80) or 'Tâches proposées'
+        cle = (phase_index, nom_phase)
+        if cle not in phases:
+            phases[cle] = {'nom': nom_phase, 'livrables': [], 'taches': []}
+            ordre_phases.append(cle)
+
+        duree_brute = (form.get(f'duree_{index}') or '').strip()
+        if re.fullmatch(r'[+-]?\d+', duree_brute):
+            duree = int(duree_brute)
+        else:
+            duree = None  # ``valider_proposition`` signalera la durée invalide
+
+        phases[cle]['taches'].append({
+            'code': _texte_wbs(form.get(f'code_{index}'), 40),
+            'description': _texte_wbs(
+                form.get(f'description_{index}'), WBS_TEXTE_MAX
+            ),
+            'duree': duree,
+            'predecesseurs': _liste_predecesseurs(
+                form.get(f'predecesseurs_{index}')
+            ),
+            'jalon': duree == 0,
+        })
+
+    for cle in ordre_phases:
+        brut_livrables = form.get(f'livrables_{cle[0]}') or ''
+        phases[cle]['livrables'] = [
+            morceau.strip()[:240]
+            for morceau in str(brut_livrables).split(' ;; ')
+            if morceau.strip()
+        ]
+
+    source = _texte_wbs(form.get('source'), 20)
+    if source not in ('regles', 'ia'):
+        source = 'regles'
+
+    return {
+        'objectif': objectif,
+        'contraintes': contraintes,
+        'hypotheses': _texte_wbs(form.get('hypotheses'), WBS_TEXTE_MAX),
+        'limites': _texte_wbs(form.get('limites'), WBS_TEXTE_MAX),
+        'source': source,
+        'avertissements': _avertissements_formulaire(form),
+        'phases': [phases[cle] for cle in ordre_phases],
+    }
+
+
+def _apercu_wbs(wbs):
+    """Aplatit une proposition pour le gabarit (indices de champs globaux)."""
+    donnees = wbs if isinstance(wbs, dict) else {}
+    phases = []
+    jalons = []
+    livrables = []
+    index = 0
+
+    brut_phases = donnees.get('phases') or []
+    if not isinstance(brut_phases, (list, tuple)):
+        brut_phases = []
+
+    for phase_index, phase in enumerate(brut_phases):
+        if not isinstance(phase, dict):
+            continue
+        nom_phase = _texte_wbs(phase.get('nom'), 80) or 'Tâches proposées'
+        livrables_phase = [
+            _texte_wbs(element, 240) for element in _liste_public(phase.get('livrables'))
+        ]
+        livrables_phase = [element for element in livrables_phase if element]
+        livrables.extend(livrables_phase)
+        lignes = []
+
+        brut_taches = phase.get('taches') or []
+        if not isinstance(brut_taches, (list, tuple)):
+            brut_taches = []
+        for tache in brut_taches:
+            if not isinstance(tache, dict):
+                continue
+            duree_brute = tache.get('duree', 0)
+            try:
+                duree = int(duree_brute)
+            except (TypeError, ValueError):
+                duree = 0
+            code = _texte_wbs(tache.get('code'), 40)
+            description = _texte_wbs(tache.get('description'), WBS_TEXTE_MAX)
+            est_jalon = bool(tache.get('jalon')) or duree == 0
+            lignes.append({
+                'index': index,
+                'code': code,
+                'description': description,
+                'duree': duree,
+                'predecesseurs': ', '.join(
+                    _liste_public(tache.get('predecesseurs'))
+                ),
+                'jalon': est_jalon,
+            })
+            if est_jalon:
+                jalons.append({'code': code, 'description': description})
+            index += 1
+
+        phases.append({
+            'index': phase_index,
+            'nom': nom_phase,
+            'livrables': livrables_phase,
+            'lignes': lignes,
+        })
+
+    source = _texte_wbs(donnees.get('source'), 20)
+    return {
+        'objectif': _texte_wbs(donnees.get('objectif'), WBS_OBJECTIF_MAX),
+        'contraintes': _texte_wbs(donnees.get('contraintes'), WBS_CONTRAINTES_MAX),
+        'hypotheses': _texte_wbs(donnees.get('hypotheses'), WBS_TEXTE_MAX),
+        'limites': _texte_wbs(donnees.get('limites'), WBS_TEXTE_MAX),
+        'source': source or 'regles',
+        'avertissements': [
+            _texte_wbs(element, WBS_TEXTE_MAX)
+            for element in _liste_public(donnees.get('avertissements'))
+        ],
+        'phases': phases,
+        'livrables': livrables,
+        'jalons': jalons,
+        'nb_taches': index,
+    }
+
+
+def _creer_projet_depuis_wbs(wbs, taches):
+    """Crée le projet, ses tâches et ses dépendances (validation déjà faite).
+
+    La fonction ajoute les objets à la session mais ne commit pas : l'appelant
+    ajoute l'audit dans la même transaction avant de valider.
+    """
+    objectif = _texte_wbs(wbs.get('objectif'), WBS_OBJECTIF_MAX)
+    contraintes = _texte_wbs(wbs.get('contraintes'), WBS_CONTRAINTES_MAX)
+    hypotheses = _texte_wbs(wbs.get('hypotheses'), WBS_TEXTE_MAX)
+    projet = Project(
+        user_id=current_user.id,
+        name=objectif[:WBS_NOM_PROJET_MAX] or 'Projet IA',
+        description=contraintes or hypotheses or None,
+        status='actif',
+    )
+    db.session.add(projet)
+    db.session.flush()
+
+    par_code = {}
+    for code in taches:
+        infos = taches[code]
+        tache = Task(
+            project_id=projet.id,
+            code=code,
+            description=_texte_wbs(infos.get('description'), WBS_TEXTE_MAX),
+            duree=int(infos.get('duree', 0)),
+        )
+        db.session.add(tache)
+        par_code[code] = tache
+    db.session.flush()
+
+    nb_dependances = 0
+    for code, infos in taches.items():
+        for predecesseur in (infos.get('depend_de') or []):
+            cible = par_code.get(predecesseur)
+            if cible is None:
+                raise ValueError(
+                    f"Le prédécesseur « {predecesseur} » n'a pas pu être résolu."
+                )
+            db.session.add(Dependency(
+                successor_id=par_code[code].id,
+                predecessor_id=cible.id,
+                type_relation='FS',
+            ))
+            nb_dependances += 1
+
+    return projet, nb_dependances
+
+
 @ia_bp.app_context_processor
 def lien_assistant_navigation():
     """Fournit un lien sûr vers l'assistant du projet le plus récent.
@@ -344,6 +598,27 @@ def lien_assistant_navigation():
     return {'assistant_projet_recent': projet, 'assistant_url': url}
 
 
+@ia_bp.app_context_processor
+def lien_optimisation_assistee():
+    """Lien sûr vers l'optimisation assistée (blueprint livré en parallèle).
+
+    Tant que ``routes_optimisation_ia`` n'est pas enregistré, le lien retombe
+    sur la simulation classique : la page de détail reste rendable et le lien
+    IA est déjà présent. Dès que le blueprint existe, ``url_for()`` fournit
+    l'URL canonique ``/projects/<id>/optimisation/assistee``.
+    """
+    def url_optimisation_assistee(project_id):
+        try:
+            return url_for('optimisation_ia.assister', project_id=project_id)
+        except BuildError:
+            try:
+                return url_for('projects.optimisation', project_id=project_id)
+            except BuildError:
+                return '#'
+
+    return {'url_optimisation_assistee': url_optimisation_assistee}
+
+
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
@@ -356,6 +631,133 @@ def statut():
         'modele': configuration_ia.get('modele'),
         'limite_appels_heure': configuration_ia.get('max_appels_par_heure'),
     })
+
+
+@ia_bp.route('/projets/nouveau', methods=['GET', 'POST'])
+@login_required
+def nouveau_projet_wbs():
+    """Proposition WBS modifiable, enregistrée seulement après confirmation.
+
+    ``etape=generer`` ne fait aucun écrit en base : elle produit un aperçu
+    éditable. ``etape=enregistrer`` relit tous les champs soumis, revalide le
+    graphe côté serveur et exige ``confirmer=oui`` avant toute création.
+    """
+    valeurs = {
+        'objectif': _texte_wbs(request.form.get('objectif'), WBS_OBJECTIF_MAX),
+        'contraintes': _texte_wbs(
+            request.form.get('contraintes'), WBS_CONTRAINTES_MAX
+        ),
+    }
+    apercu = None
+    erreurs = []
+
+    if request.method == 'POST':
+        etape = (request.form.get('etape') or '').strip()
+
+        if etape == 'generer':
+            if not valeurs['objectif']:
+                flash("L'objectif doit être renseigné pour générer une WBS.", 'error')
+            elif generer_wbs is None or valider_proposition is None:
+                flash("Le service de génération WBS est indisponible.", 'error')
+            else:
+                limite = _configuration()['max_appels_par_heure']
+                identifiant = current_user.get_id() or str(current_user.id)
+                if not _consommer_appel(identifiant, limite):
+                    pluriel = '' if limite == 1 else 's'
+                    flash(
+                        f"Limite d'usage atteinte : {limite} génération{pluriel} "
+                        "par heure. Veuillez réessayer plus tard.",
+                        'error',
+                    )
+                else:
+                    try:
+                        wbs = generer_wbs(
+                            valeurs['objectif'], valeurs['contraintes']
+                        )
+                    except ValueError as exc:
+                        flash(str(exc), 'error')
+                    except Exception:
+                        logger.exception("Le service de génération WBS a échoué.")
+                        flash("La génération a échoué. Veuillez réessayer.", 'error')
+                    else:
+                        _, erreurs = valider_proposition(wbs)
+                        apercu = _apercu_wbs(wbs)
+                        valeurs = {
+                            'objectif': apercu['objectif'],
+                            'contraintes': apercu['contraintes'],
+                        }
+
+        elif etape == 'enregistrer':
+            wbs = _reconstruire_wbs(
+                request.form, valeurs['objectif'], valeurs['contraintes']
+            )
+            apercu = _apercu_wbs(wbs)
+
+            if not valeurs['objectif']:
+                erreurs.append("L'objectif est obligatoire pour créer un projet.")
+
+            if request.form.get('confirmer') != 'oui':
+                # Aucune écriture, aucune validation destructive : l'aperçu est
+                # simplement restitué avec son formulaire éditable.
+                flash(
+                    "Confirmation explicite requise : aucun projet n'a été "
+                    "enregistré.",
+                    'error',
+                )
+            elif valider_proposition is None:
+                flash("Le service de validation WBS est indisponible.", 'error')
+            else:
+                taches, erreurs_validation = valider_proposition(wbs)
+                erreurs.extend(erreurs_validation)
+                if not erreurs:
+                    try:
+                        projet, nb_dependances = _creer_projet_depuis_wbs(
+                            wbs, taches
+                        )
+                        source = _texte_wbs(wbs.get('source'), 20) or 'regles'
+                        db.session.add(AuditLog(
+                            user_id=current_user.id,
+                            action='IA_WBS_CREATION',
+                            details=str({
+                                'project_id': projet.id,
+                                'nb_taches': len(taches),
+                                'source': source,
+                            }),
+                        ))
+                        db.session.commit()
+                    except Exception:
+                        db.session.rollback()
+                        logger.exception(
+                            "Impossible d'enregistrer le projet généré par l'IA."
+                        )
+                        flash(
+                            "Le projet n'a pas pu être enregistré. Vérifiez les "
+                            "données et réessayez.",
+                            'error',
+                        )
+                    else:
+                        flash(
+                            f"Projet créé avec succès : {len(taches)} tâche(s), "
+                            f"{nb_dependances} dépendance(s).",
+                            'success',
+                        )
+                        return redirect(
+                            url_for('projects.detail', project_id=projet.id)
+                        )
+                else:
+                    for erreur in erreurs:
+                        flash(erreur, 'error')
+
+        else:
+            flash("Étape inconnue : utilisez le formulaire proposé.", 'error')
+
+    return render_template(
+        'projects/wbs_preview.html',
+        valeurs=valeurs,
+        apercu=apercu,
+        erreurs=erreurs,
+        limite_appels=_configuration()['max_appels_par_heure'],
+    )
 
 
 @ia_bp.route('/projets/<int:project_id>/assistant', methods=['GET'])

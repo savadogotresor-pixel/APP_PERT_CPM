@@ -67,6 +67,17 @@ except ImportError:
 else:
     app.register_blueprint(admin_bp)
 
+try:
+    from routes_optimisation_ia import optimisation_ia_bp
+except ImportError:
+    # Blueprint d'optimisation assistée livré en parallèle : l'application
+    # reste fonctionnelle s'il n'est pas encore présent.
+    app.logger.info(
+        "routes_optimisation_ia indisponible : blueprint /projects non enregistré."
+    )
+else:
+    app.register_blueprint(optimisation_ia_bp)
+
 
 @app.after_request
 def ajouter_en_tetes_securite(response):

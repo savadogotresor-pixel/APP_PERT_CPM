@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Optimisation assistée — {{ projet.name }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        .mp-page { max-width: 1200px; }
+        .mp-nav { justify-content: flex-end; }
+        .mp-aide { font-size: .85rem; color: #6b7280; line-height: 1.55; }
+        .mp-meta { color: #6b7280; font-size: .9rem; }
+        .mp-bandeau { background: #fffbeb; border: 2px solid #f59e0b; border-left: 6px solid #d97706; color: #92400e; padding: 14px 18px; border-radius: 8px; margin: 16px 0 22px; font-weight: 700; font-size: 1rem; }
+        .mp-alerte { background: #fef2f2; border: 2px solid #fca5a5; border-left: 6px solid #dc2626; color: #991b1b; padding: 14px 18px; border-radius: 8px; margin: 14px 0 22px; line-height: 1.55; }
+        .mp-encadre { background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 14px 18px; margin: 14px 0; }
+        .mp-encadre h3 { margin: 0 0 8px; font-size: 1rem; color: #1e3a8a; }
+        .mp-encadre p, .mp-encadre ul { margin: 0; }
+        .mp-encadre ul { padding-left: 20px; line-height: 1.6; }
+        .mp-reference { background: #ecfdf5; border-color: #86efac; }
+        .mp-reference h3 { color: #166534; }
+        .mp-synthese { display: flex; flex-wrap: wrap; gap: 14px; margin: 12px 0 18px; }
+        .mp-carte { flex: 1 1 260px; background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 14px 18px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+        .mp-carte h2 { margin: 0 0 8px; font-size: 1rem; color: #374151; }
+        .mp-synthese-valeur { font-size: 1.35rem; font-weight: 700; color: #1e3a8a; margin: 0; }
+        .mp-table { width: 100%; border-collapse: collapse; font-size: .84rem; margin: 10px 0 18px; }
+        .mp-table th, .mp-table td { border: 1px solid #e5e7eb; padding: 8px 10px; text-align: left; vertical-align: top; }
+        .mp-table th { background: #f3f4f6; color: #374151; }
+        .mp-table td ul { margin: 0; padding-left: 18px; }
+        .mp-badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: .78rem; font-weight: 700; }
+        .mp-badge-crashing { background: #dbeafe; color: #1e40af; }
+        .mp-badge-fast { background: #ede9fe; color: #5b21b6; }
+        .mp-gain { white-space: nowrap; font-weight: 700; color: #166534; }
+        .mp-scenario { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px 20px; margin: 18px 0; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+        .mp-scenario > h3 { margin: 0 0 6px; color: #1e3a8a; }
+        .mp-vide { background: #f9fafb; padding: 20px; border-radius: 6px; color: #6b7280; }
+        .mp-flash { padding: 10px 14px; border-radius: 6px; margin-bottom: 10px; font-size: .9rem; }
+        .mp-flash-success { background: #dcfce7; color: #166534; }
+        .mp-flash-error { background: #fee2e2; color: #991b1b; }
+        .mp-btn { display: inline-block; background: #2563eb; color: #fff; padding: 10px 18px; border-radius: 6px; font-size: .9rem; font-weight: 600; text-decoration: none; margin: 8px 8px 0 0; }
+        .mp-btn-secondary { background: #e5e7eb; color: #1f2937; }
+    </style>
+</head>
+<body>
+    {% macro liste_chemins(chemins) %}
+        {% if chemins %}
+        <ul>
+            {% for chemin in chemins %}
+            <li>{{ chemin if chemin is string else chemin|join(' → ') }}</li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <span class="mp-meta">Aucun</span>
+        {% endif %}
+    {% endmacro %}
+
+    {% macro bloc_valeurs(valeur) %}
+        {% if valeur is mapping %}
+        <ul>
+            {% for cle, contenu in valeur.items() %}
+            <li><strong>{{ cle }}</strong> : {{ contenu }}</li>
+            {% endfor %}
+        </ul>
+        {% elif valeur is sequence and valeur is not string %}
+        <ul>
+            {% for element in valeur %}
+            <li>{{ element }}</li>
+            {% endfor %}
+        </ul>
+        {% elif valeur %}
+        <p>{{ valeur }}</p>
+        {% else %}
+        <p class="mp-meta">Aucune information fournie.</p>
+        {% endif %}
+    {% endmacro %}
+
+    {% macro liste_modifications(modifications, dependance) %}
+        {% if modifications %}
+        <ul>
+            {% if modifications is mapping %}
+                {% for code, info in modifications.items() %}
+                    {% set avant = info.get('avant', info.get('duree_initiale', '—')) if info is mapping else info %}
+                    {% set apres = info.get('apres', info.get('duree_simulee', '—')) if info is mapping else '—' %}
+                    <li><strong>{{ code }}</strong> : {{ avant }} j → {{ apres }} j</li>
+                {% endfor %}
+            {% else %}
+                {% for info in modifications %}
+                    {% if info is mapping %}
+                        {% set code = info.get('code', info.get('tache', '—')) %}
+                        {% set avant = info.get('avant', info.get('duree_initiale', '—')) %}
+                        {% set apres = info.get('apres', info.get('duree_simulee', '—')) %}
+                        <li>
+                            <strong>{{ code }}</strong> : {{ avant }} j → {{ apres }} j
+                            {% if avant is number and apres is number %}
+                            (réduction de {{ avant - apres }} j)
+                            {% endif %}
+                        </li>
+                    {% else %}
+                    <li>{{ info }}</li>
+                    {% endif %}
+                {% endfor %}
+            {% endif %}
+        </ul>
+        {% else %}
+        <p class="mp-meta">
+            Aucune durée de tâche n'est modifiée.
+            {% if dependance %}Seule la dépendance « {{ dependance[0] }} → {{ dependance[1] }} » est retirée dans cette hypothèse.{% endif %}
+        </p>
+        {% endif %}
+    {% endmacro %}
+
+    <nav class="nav mp-nav">
+        <a href="{{ accueil_url }}">Accueil</a>
+        <a href="{{ mes_projets_url }}">Mes projets</a>
+        <a href="{{ url_for('projects.detail', project_id=projet.id) }}">Détail du projet</a>
+        {% if current_user.is_authenticated %}
+        <a href="{{ deconnexion_url }}">Déconnexion</a>
+        {% endif %}
+    </nav>
+
+    <main class="mp-page">
+        <h1>Optimisation assistée</h1>
+        <p class="mp-aide">Projet : <strong>{{ projet.name }}</strong></p>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for categorie, message in messages %}
+                <div class="mp-flash mp-flash-{{ categorie }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <div class="mp-bandeau">Le planning de référence n'est pas modifié : ces scénarios sont des hypothèses recalculées par le moteur PERT/CPM.</div>
+
+        <div class="mp-alerte">
+            <strong>Avertissement fast-tracking.</strong>
+            Aucune contrainte métier n'a été fournie : les contraintes métier non fournies
+            doivent être vérifiées par l'équipe projet avant d'envisager un chevauchement
+            de tâches. Le scénario affiché est une hypothèse recalculée, pas une recommandation.
+        </div>
+
+        <section aria-labelledby="synthese-titre">
+            <h2 id="synthese-titre">Synthèse initiale du planning</h2>
+            <div class="mp-synthese">
+                <div class="mp-carte">
+                    <h2>Durée totale initiale</h2>
+                    <p class="mp-synthese-valeur">{{ duree_totale }} jour{{ '' if duree_totale == 1 else 's' }}</p>
+                </div>
+                <div class="mp-carte">
+                    <h2>Chemin(s) critique(s) initial(aux)</h2>
+                    {{ liste_chemins(chemins_critiques) }}
+                </div>
+                <div class="mp-carte">
+                    <h2>Tâches analysées</h2>
+                    <p class="mp-synthese-valeur">{{ taches|length }}</p>
+                </div>
+            </div>
+        </section>
+
+        <h2>Comparatif des scénarios proposés</h2>
+        {% if scenarios %}
+        <table class="mp-table">
+            <thead>
+                <tr>
+                    <th>Type</th>
+                    <th>Titre</th>
+                    <th>Description</th>
+                    <th>Durée initiale</th>
+                    <th>Durée simulée</th>
+                    <th>Gain</th>
+                    <th>Chemins critiques initiaux</th>
+                    <th>Chemins critiques simulés</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for scenario in scenarios %}
+                    {% set type_scenario = scenario.get('type', '') %}
+                    {% set resultat = scenario.get('resultat') or {} %}
+                    {% set initial = resultat.get('initial') or {} %}
+                    {% set simule = resultat.get('simule') or {} %}
+                    {% set gain = resultat.get('gains', '—') %}
+                    <tr data-type="{{ type_scenario }}">
+                        <td>
+                            <span class="mp-badge {{ 'mp-badge-crashing' if type_scenario == 'crashing' else 'mp-badge-fast' }}">
+                                {{ type_scenario }}
+                            </span>
+                        </td>
+                        <td><strong>{{ scenario.get('titre', '—') }}</strong></td>
+                        <td>{{ scenario.get('description', '—') }}</td>
+                        <td>{{ initial.get('duree_totale', '—') }} jour{{ '' if initial.get('duree_totale') == 1 else 's' }}</td>
+                        <td>{{ simule.get('duree_totale', '—') }} jour{{ '' if simule.get('duree_totale') == 1 else 's' }}</td>
+                        <td class="mp-gain" data-gain="{{ gain }}">{{ gain }} jour(s) gagné(s)</td>
+                        <td>{{ liste_chemins(initial.get('chemins_critiques')) }}</td>
+                        <td>{{ liste_chemins(simule.get('chemins_critiques')) }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="mp-vide">Aucun scénario exploitable : aucune tâche critique à durée positive.</div>
+        {% endif %}
+
+        {% for scenario in scenarios %}
+            {% set resultat = scenario.get('resultat') or {} %}
+            <section class="mp-scenario" aria-labelledby="scenario-{{ loop.index }}">
+                <h3 id="scenario-{{ loop.index }}">Scénario {{ loop.index }} — {{ scenario.get('titre', '—') }}</h3>
+                <p class="mp-aide">{{ scenario.get('description', '') }}</p>
+
+                <div class="mp-encadre">
+                    <h3>Hypothèses</h3>
+                    {{ bloc_valeurs(scenario.get('hypotheses', resultat.get('hypotheses'))) }}
+                </div>
+
+                <div class="mp-encadre">
+                    <h3>Limites</h3>
+                    {{ bloc_valeurs(scenario.get('limites', resultat.get('limites'))) }}
+                </div>
+
+                <div class="mp-encadre">
+                    <h3>Compromis</h3>
+                    {{ bloc_valeurs(scenario.get('compromis')) }}
+                </div>
+
+                <div class="mp-encadre">
+                    <h3>Modifications envisagées</h3>
+                    {{ liste_modifications(resultat.get('modifications'), scenario.get('dependance_retiree')) }}
+                </div>
+            </section>
+        {% endfor %}
+
+        <div class="mp-encadre mp-reference">
+            <h3>Planning de référence inchangé</h3>
+            <p>
+                Aucun scénario n'est appliqué par cette page. Les durées, dépendances et
+                jalons du projet restent strictement identiques ; toute application
+                nécessiterait une confirmation explicite et un autre parcours.
+            </p>
+        </div>
+
+        <p>
+            <a class="mp-btn mp-btn-secondary" href="{{ url_for('projects.detail', project_id=projet.id) }}">
+                Retour au détail du projet
+            </a>
+        </p>
+    </main>
+</body>
+</html>
