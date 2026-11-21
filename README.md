@@ -6,6 +6,10 @@ Une application web **Flask** pour calculer et visualiser un planning de projet 
 
 🚀 [https://app-pert-cpm.onrender.com/](https://app-pert-cpm.onrender.com/)
 
+## Documentation
+
+- [Cahier des charges — PERT/CPM PRO (v1.0)](docs/Cahier_des_charges_PERT_CPM_PRO.docx) : spécifications fonctionnelles et techniques de l'évolution prévue de l'application.
+
 ## Fonctionnalités
 
 - **Démo prête à l'emploi** avec un projet de 12 tâches (`/demo`)
