@@ -41,6 +41,11 @@ from models import (
 )
 from services.import_export import exporter_csv, exporter_xlsx, importer_fichier
 
+try:
+    from services.rapport import generer_rapport_pdf
+except ImportError:  # pragma: no cover - dépend de l'avancement du chantier
+    generer_rapport_pdf = None
+
 # Le modèle ``Scenario`` et le service d'optimisation sont fournis par un autre
 # module du chantier. Les imports tolérants permettent de charger ce blueprint
 # même si ce travail parallèle n'est pas encore terminé ; les helpers ci-dessous
@@ -143,6 +148,16 @@ def _simulateur():
     return simuler
 
 
+def _generateur_rapport():
+    """Retourne ``generer_rapport_pdf`` (import différé si le service arrive)."""
+    global generer_rapport_pdf
+    if generer_rapport_pdf is None:
+        from services.rapport import generer_rapport_pdf as fonction_rapport
+
+        generer_rapport_pdf = fonction_rapport
+    return generer_rapport_pdf
+
+
 def _modele_scenario():
     """Retourne le modèle ``Scenario`` dès qu'il est disponible."""
     global Scenario
@@ -194,10 +209,14 @@ def _details_scenario(scenario):
     }
 
 
+def _nom_norme(projet):
+    """Nom de fichier sûr, dérivé du nom du projet."""
+    return secure_filename(projet.name or '') or 'projet'
+
+
 def _nom_export(projet, extension):
     """Nom de téléchargement sûr, dérivé du nom du projet."""
-    base = secure_filename(projet.name or '') or 'projet'
-    return f'{base}_resultats.{extension}'
+    return f'{_nom_norme(projet)}_resultats.{extension}'
 
 
 def _apercu_import(taches):
@@ -932,6 +951,50 @@ def export_xlsx(project_id):
         mimetype=MIME_XLSX,
         as_attachment=True,
         download_name=_nom_export(projet, 'xlsx'),
+    )
+
+
+@projects_bp.route('/<int:project_id>/rapport.pdf')
+@login_required
+def rapport_pdf(project_id):
+    """Génère côté serveur le rapport PDF du planning PERT/CPM."""
+    projet = _projet_ou_404(project_id)
+    taches = project_to_taches(projet)
+
+    try:
+        resultat = compute(taches)
+    except ValidationError as exc:
+        for erreur in _messages_erreur(exc):
+            flash(erreur, 'error')
+        return redirect(url_for('projects.detail', project_id=projet.id))
+
+    reference = _date_reference(projet)
+    date_debut = reference.isoformat() if reference is not None else None
+
+    try:
+        generer_rapport_pdf = _generateur_rapport()
+        pdf = generer_rapport_pdf(
+            projet.name,
+            taches,
+            resultat.resultats,
+            resultat.duree_totale,
+            resultat.chemins_critiques,
+            date_debut,
+        )
+    except ImportError:
+        flash("Le service de rapport PDF n'est pas disponible.", 'error')
+        return redirect(url_for('projects.detail', project_id=projet.id))
+
+    _journal(
+        'RAPPORT_PDF',
+        f"Rapport PDF du projet « {projet.name} » généré.",
+    )
+    db.session.commit()
+    return send_file(
+        BytesIO(pdf),
+        mimetype='application/pdf',
+        as_attachment=True,
+        download_name=f'{_nom_norme(projet)}_rapport_pert_cpm.pdf',
     )
 
 

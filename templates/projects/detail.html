@@ -58,6 +58,7 @@
                 <a class="mp-btn mp-btn-secondary" href="{{ url_for('projects.optimisation', project_id=projet.id) }}">⚡ Simuler une optimisation</a>
                 <a class="mp-btn mp-btn-secondary" href="{{ url_for('projects.export_csv', project_id=projet.id) }}">⬇️ CSV</a>
                 <a class="mp-btn mp-btn-secondary" href="{{ url_for('projects.export_xlsx', project_id=projet.id) }}">⬇️ Excel</a>
+                <a class="mp-btn mp-btn-secondary" href="{{ url_for('projects.rapport_pdf', project_id=projet.id) }}">📄 Rapport PDF (serveur)</a>
                 <a class="mp-btn" href="{{ url_for('projects.new_task', project_id=projet.id) }}">➕ Nouvelle tâche</a>
             </div>
         </div>
