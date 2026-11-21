@@ -1,0 +1,51 @@
+{# Conseils automatiques du moteur maison (services.conseiller).
+   `conseils_ia` : liste de dicts {id_regle, titre, gravite, explication, preuve, action}.
+   Ne rien afficher si la variable est absente ou vide. Aucun script JS. #}
+{% set conseils_affiches = conseils_ia | default([], true) %}
+{% if conseils_affiches %}
+<section class="card" aria-labelledby="ia-conseils-titre">
+    <div class="card-header">
+        <h2 class="card-title section-title" id="ia-conseils-titre">💡 Conseils de l'IA maison</h2>
+        <span class="badge badge-info">{{ conseils_affiches | length }} conseil(s)</span>
+    </div>
+    <div class="card-body">
+        <p class="field-hint">Conseils calculés automatiquement à partir du planning PERT/CPM : chaque preuve reprend une valeur issue du calcul.</p>
+        <div class="card-grid">
+            {% for conseil in conseils_affiches %}
+            {% if conseil is mapping %}
+            {% set gravite = conseil.get('gravite') | string %}
+            {% set style_gravite = {'critical': 'badge-critical', 'warning': 'badge-warning', 'info': 'badge-info'}.get(gravite, 'badge-muted') %}
+            {% set libelle_gravite = {'critical': 'Prioritaire', 'warning': 'Attention', 'info': 'Information'}.get(gravite, 'Conseil') %}
+            <article class="card">
+                <div class="card-header">
+                    <h3 class="card-title">{{ conseil.get('titre') or 'Conseil' }}</h3>
+                    <span class="badge {{ style_gravite }}">{{ libelle_gravite }}</span>
+                </div>
+                <div class="card-body">
+                    {% if conseil.get('explication') %}
+                    <p>{{ conseil.explication }}</p>
+                    {% endif %}
+                    {% if conseil.get('preuve') %}
+                    <p class="meta"><strong>Preuve calculée :</strong></p>
+                    {% set texte_preuve = conseil.preuve | string %}
+                    {% if ' ; ' in texte_preuve %}
+                    <ul>
+                        {% for mesure in texte_preuve.split(' ; ') %}
+                        <li><code>{{ mesure }}</code></li>
+                        {% endfor %}
+                    </ul>
+                    {% else %}
+                    <p><code>{{ texte_preuve }}</code></p>
+                    {% endif %}
+                    {% endif %}
+                    {% if conseil.get('action') %}
+                    <p><strong>Action suggérée :</strong> {{ conseil.action }}</p>
+                    {% endif %}
+                </div>
+            </article>
+            {% endif %}
+            {% endfor %}
+        </div>
+    </div>
+</section>
+{% endif %}

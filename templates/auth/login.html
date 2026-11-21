@@ -19,8 +19,7 @@
             {% if current_user.is_authenticated %}
             <li><a href="{{ url_for('accueil') }}">Accueil</a></li>
             {% endif %}
-            <li><a href="/demo">📊 Démo (12 tâches)</a></li>
-            <li><a href="/saisie">✏️ Saisie des tâches</a></li>
+            <li><a href="{{ url_for('catalogue.index') }}">🧰 Catalogue</a></li>
             {% if current_user.is_authenticated %}
             <li><a href="{{ url_for('auth.profile') }}">Profil</a></li>
             <li><a href="{{ projects_url|default('/projets', true) }}">Mes projets</a></li>

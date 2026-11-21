@@ -1,6 +1,7 @@
 """Configuration de l'application PERT/CPM (développement, production, tests)."""
 
 import os
+from datetime import timedelta
 
 
 def _database_uri():
@@ -17,6 +18,13 @@ class Config:
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     MAX_CONTENT_LENGTH = 8 * 1024 * 1024
     WTF_CSRF_ENABLED = True
+
+    # « Se souvenir de moi » : cookie persistant Flask-Login explicite.
+    REMEMBER_COOKIE_NAME = 'remember_token'
+    REMEMBER_COOKIE_DURATION = timedelta(days=30)
+    REMEMBER_COOKIE_HTTPONLY = True
+    REMEMBER_COOKIE_REFRESH_EACH_REQUEST = True
+    PERMANENT_SESSION_LIFETIME = timedelta(days=30)
 
     # Assistant IA (§19) : la clé reste exclusivement côté serveur. Elle n'est
     # jamais sérialisée dans un template, un JSON ou le journal d'audit.
@@ -66,6 +74,8 @@ class ProductionConfig(Config):
     SESSION_COOKIE_SECURE = True
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = 'Lax'
+    REMEMBER_COOKIE_SECURE = True
+    REMEMBER_COOKIE_SAMESITE = 'Lax'
     PREFERRED_URL_SCHEME = 'https'
     WTF_CSRF_ENABLED = True
 

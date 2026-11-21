@@ -20,7 +20,7 @@ La page d'accueil (`/`) est **protégée** : sans session, vous êtes redirigé 
 - **📊 Découvrir la démo (12 tâches)** : ouvre un projet d'exemple déjà calculé ;
 - **✏️ Saisir vos tâches** : ouvre le formulaire de saisie.
 
-La navigation donne accès à l'accueil, à la démo, à la saisie et à « Mes projets ». « Connexion » et « Inscription » ne sont pas des rubriques de navigation : ces actions restent disponibles depuis la page de connexion (lien « Créer un compte »).
+La barre de navigation donne accès à **🧰 Catalogue** (et, une fois connecté, à l'accueil, « Mes projets », l'assistant IA et le profil). Les liens **Démo** et **Saisie** n'y figurent plus : la démo reste accessible depuis le bouton de l'accueil et le catalogue ; la saisie depuis le bouton de l'accueil ou l'URL `/saisie`. « Connexion » et « Inscription » ne sont pas des rubriques de navigation : ces actions restent disponibles depuis la page de connexion (lien « Créer un compte »).
 
 ### 2.2 Connexion, chiffrement du mot de passe et mode hors ligne
 
@@ -118,7 +118,7 @@ Une tâche peut avoir une marge totale positive et une marge libre nulle : elle 
 
 ### 4.2 Conseils d'optimisation
 
-La section **💡 Conseils d'optimisation** apparaît **uniquement après une saisie personnalisée** (elle n'est pas affichée sur la démo). Les conseils sont classés par couleur :
+La section historique **💡 Conseils d'optimisation** apparaît **uniquement après une saisie personnalisée**. Une section distincte, **💡 Conseils de l'IA maison**, est désormais affichée dès que le calcul est disponible, y compris sur la démo (voir §8.2). Les conseils historiques sont classés par couleur :
 
 - 🔴 **Critique** : les tâches qui pilotent la durée totale ; tout retard dessus retarde la fin du projet ;
 - 🟠 **Attention** : tâches à marge faible, qui pourraient devenir critiques ;
@@ -203,3 +203,27 @@ python app.py
 ```
 
 Ouvrez ensuite <http://127.0.0.1:5000>. L'accueil renvoie vers `/login` : créez un compte via « Créer un compte » si nécessaire. Le mode debug est désactivé par défaut : définissez `FLASK_DEBUG=1` pour l'activer (développement uniquement). `GET /health` renvoie `{"status": "ok"}` lorsque le serveur fonctionne. Utilisez la version déployée pour un usage courant.
+
+## 8. Fonctions récentes
+
+### 8.1 Catalogue de projets
+
+Ouvrez **🧰 Catalogue** dans la barre de navigation, ou `/catalogue/`. La liste publique présente **12 projets types variés** (construction d'une maison, application mobile, mariage, campagne marketing, thèse, ferme maraîchère, déménagement d'entreprise, formation en ligne, court métrage, cabinet médical, festival, refonte de site web), avec leur durée calculée.
+
+Cliquez sur **Voir le projet** pour ouvrir la fiche `/catalogue/<id>` : vous y voyez le résumé, le tableau des calculs et le chemin critique, recalculés par le moteur PERT/CPM. Sur la fiche, le bouton **🚀 Optimiser ce projet** demande une connexion si nécessaire, crée une **copie du projet dans votre compte** avec les durées d'origine, puis ouvre directement la page de simulation d'optimisation. Le planning de référence n'est pas modifié par cette copie : les réductions ne sont que simulées tant que vous ne les appliquez pas explicitement.
+
+### 8.2 Conseils IA maison automatiques
+
+Une section **💡 Conseils de l'IA maison** s'affiche automatiquement sous les résultats de la démo (`/demo`), de votre saisie (`/resultats_custom`) et de la page d'optimisation d'un projet. Elle est distincte des « Conseils d'optimisation » historiques décrits au §4.2.
+
+Ces conseils reposent sur **8 règles déterministes** : chemin critique unique, chemins critiques multiples, tâche critique à plusieurs successeurs, forte densité de dépendances, jalons en fin de chaîne, marge libre nulle avec marge totale positive, démarrages indépendants multiples et durée totale nulle. Chaque carte indique une gravité (Prioritaire / Attention / Information), une explication, une **preuve calculée** (valeurs issues du moteur : durée, marges, décomptes, successeurs) et une action suggérée. Aucun service externe n'est contacté et aucun chiffre n'est inventé. Depuis la fiche d'un projet, le bouton **💡 Conseils (IA maison)** ouvre une page dédiée réservée au propriétaire.
+
+### 8.3 Assistant IA conversationnel
+
+Le lien **Assistant IA** de la navigation ouvre `/ia/discussion`. Choisissez un projet dans la liste, posez votre question en français : le moteur maison reconnaît **16 intentions** (durée totale, chemin critique, marges, tâche précise, dépendances, risques, optimisation, explication PERT, date cible, etc.) et répond avec les **chiffres recalculés** du projet choisi. Chaque réponse affiche ses sources pour permettre la vérification ; si le planning n'est pas calculable, l'assistant le signale au lieu d'avancer un nombre.
+
+Cet espace ne fait **aucun appel à un service externe**, ne demande aucune clé API et n'applique **aucun quota**. Vos échanges restent dans l'historique de la session (20 messages maximum par projet, soit 10 questions et 10 réponses, chacun limité à 1 000 caractères). L'ancien assistant propre à chaque projet reste disponible sur sa fiche via le bouton **🤖 Assistant IA**.
+
+### 8.4 « Se souvenir de moi »
+
+La case **Se souvenir de moi** est présente sur la page de connexion **et** sur celle de création de compte. Si vous la cochez, Flask-Login dépose le cookie persistant `remember_token` : vous restez reconnu après la fermeture du navigateur. Sans cette case, la session reste classique. Le bouton **Déconnexion** supprime ce cookie.

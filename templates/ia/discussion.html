@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <title>Assistant IA — Discussion libre — PERT/CPM</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        /* Espace de discussion : bulles lisibles, sources vérifiables, mobile. */
+        .chat-layout {
+            display: grid;
+            grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+            gap: 1.25rem;
+            align-items: start;
+        }
+        .chat-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            min-width: 0;
+        }
+        .chat-projet-form { flex-direction: column; align-items: stretch; }
+        .chat-projet-form .field { margin-bottom: .75rem; }
+        .chat-projet-form select { width: 100%; }
+        .chat-thread {
+            height: min(60vh, 560px);
+            min-height: 340px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: .75rem;
+            padding: 1rem;
+            background: rgba(148, 163, 184, .07);
+            border: 1px solid rgba(100, 116, 139, .18);
+            border-radius: 14px;
+            scroll-behavior: smooth;
+        }
+        .chat-thread > .empty-state { margin: auto; text-align: center; }
+        .chat-bulle {
+            max-width: min(88%, 46rem);
+            padding: .75rem 1rem;
+            border-radius: 14px;
+            line-height: 1.55;
+            white-space: pre-wrap;
+            overflow-wrap: anywhere;
+            box-shadow: 0 2px 8px rgba(15, 23, 42, .09);
+            animation: chat-apparition .22s ease-out both;
+            transition: transform .18s ease, box-shadow .18s ease;
+        }
+        .chat-bulle:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(15, 23, 42, .13); }
+        .chat-bulle--user {
+            align-self: flex-end;
+            background: var(--primary, #4f46e5);
+            color: #fff;
+            border-bottom-right-radius: 3px;
+        }
+        .chat-bulle--ai {
+            align-self: flex-start;
+            background: #fff;
+            color: #111827;
+            border: 1px solid rgba(100, 116, 139, .18);
+            border-bottom-left-radius: 3px;
+        }
+        .chat-bulle--erreur {
+            align-self: center;
+            background: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #fecaca;
+            text-align: center;
+        }
+        .chat-bulle .chat-meta {
+            margin-top: .6rem;
+            padding-top: .5rem;
+            border-top: 1px dashed rgba(100, 116, 139, .35);
+            font-size: .8rem;
+            color: var(--muted, #64748b);
+        }
+        .chat-sources { margin-top: .5rem; font-size: .82rem; }
+        .chat-sources summary { cursor: pointer; font-weight: 600; }
+        .chat-sources ul { margin: .4rem 0 0 1.1rem; padding: 0; }
+        .chat-sources li { margin: .15rem 0; }
+        .chat-suggestions { flex-wrap: wrap; }
+        .chat-formulaire textarea { min-height: 5.5rem; resize: vertical; }
+        .chat-compteur { font-size: .8rem; color: var(--muted, #64748b); }
+        @keyframes chat-apparition {
+            from { opacity: 0; transform: translateY(6px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @media (max-width: 820px) {
+            .chat-layout { grid-template-columns: 1fr; }
+            .chat-projet-form { flex-direction: row; align-items: flex-end; }
+            .chat-projet-form .field { flex: 1 1 auto; margin-bottom: 0; }
+            .chat-thread { height: 52vh; }
+            .topbar-nav { flex-wrap: wrap; }
+        }
+        @media (max-width: 560px) {
+            .chat-projet-form { flex-direction: column; align-items: stretch; }
+            .chat-bulle { max-width: 94%; }
+            .chat-thread { min-height: 300px; padding: .75rem; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .chat-bulle { animation: none; transition: none; }
+            .chat-thread { scroll-behavior: auto; }
+        }
+    </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='design.css') }}">
+</head>
+<body>
+<div class="app-shell">
+    <header class="topbar">
+        <a class="topbar-brand" href="{{ url_for('accueil') }}"><span class="topbar-brand-icon">📊</span> PERT/CPM</a>
+        <ul class="topbar-nav">
+            <li><a href="/catalogue/">🧰 Catalogue</a></li>
+            {% if current_user.is_authenticated %}
+            <li><a href="{{ url_for('accueil') }}">🏠 Accueil</a></li>
+            <li><a href="{{ url_for('projects.list_projects') }}">📁 Mes projets</a></li>
+            <li><a href="{{ url_for('auth.profile') }}">👤 Profil</a></li>
+            <li><a href="{{ url_for('chat_ia.discussion') }}" aria-current="page">🤖 Assistant IA</a></li>
+            <li><a href="{{ url_for('auth.logout') }}">🚪 Déconnexion</a></li>
+            {% endif %}
+        </ul>
+    </header>
+
+    <main class="container">
+        <div class="page-header">
+            <div>
+                <h1 class="page-title">🤖 Assistant IA — discussion libre</h1>
+                <p class="page-subtitle">Posez votre question en français : les chiffres affichés proviennent uniquement du calcul PERT/CPM du projet choisi.</p>
+            </div>
+        </div>
+
+        <div class="alert alert-info">
+            <div>
+                <strong>IA maison, sans service externe :</strong> aucun appel réseau,
+                aucune clé API et aucun quota. Chaque réponse indique ses
+                <strong>sources</strong> pour que vous puissiez vérifier d'où vient
+                chaque nombre. Si le planning n'est pas calculable, je vous le dis
+                plutôt que d'inventer un chiffre.
+            </div>
+        </div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="flashes">
+                {% for categorie, message in messages %}
+                    {% set classe_alerte = {'error': 'alert-danger', 'danger': 'alert-danger', 'success': 'alert-success', 'warning': 'alert-warning'}.get(categorie, 'alert-info') %}
+                    <div class="alert {{ classe_alerte }} flash">{{ message }}</div>
+                {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+
+        <div class="chat-layout">
+            <aside class="card" aria-label="Choix du projet">
+                <div class="card-body">
+                    <h2 class="card-title">📁 Projet analysé</h2>
+                    {% if projets %}
+                    <form class="chat-projet-form" method="get" action="{{ url_for('chat_ia.discussion') }}">
+                        <div class="field">
+                            <label for="projet-select">Choisir un projet</label>
+                            <select id="projet-select" name="projet">
+                                {% for candidat in projets %}
+                                <option value="{{ candidat.id }}" {% if projet_id == candidat.id %}selected{% endif %}>{{ candidat.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <button class="btn btn-secondary btn-sm" type="submit">Ouvrir ce projet</button>
+                    </form>
+                    {% if projet %}
+                    <p class="meta mt-3">
+                        {{ projet.tasks|length }} tâche(s)
+                        {% if projet.description %}<br>{{ projet.description[:140] }}{% endif %}
+                    </p>
+                    {% endif %}
+                    {% else %}
+                    <p class="text-muted">Aucun projet accessible. Créez un projet dans « Mes projets » pour commencer la discussion.</p>
+                    <a class="btn btn-secondary btn-sm" href="{{ url_for('projects.list_projects') }}">Mes projets</a>
+                    {% endif %}
+                </div>
+            </aside>
+
+            <section class="chat-panel" aria-label="Conversation avec l'assistant IA">
+                <div class="d-flex align-center gap-2 flex-wrap">
+                    <h2 class="section-title mb-0">Conversation</h2>
+                    {% if projet %}
+                    <span class="badge badge-info">{{ projet.name }}</span>
+                    {% endif %}
+                </div>
+
+                <div id="conversation" class="chat-thread" role="log" aria-live="polite" aria-label="Messages de la conversation">
+                    {% for message in historique %}
+                        {% if message.get('role') == 'user' %}
+                        <div class="chat-bulle chat-bulle--user">{{ message.get('texte', '') }}</div>
+                        {% else %}
+                        <div class="chat-bulle chat-bulle--ai">
+                            <div class="chat-texte">{{ message.get('texte', '') }}</div>
+                            <div class="chat-meta">Réponse enregistrée dans cette session (20 derniers messages).</div>
+                        </div>
+                        {% endif %}
+                    {% else %}
+                    <p id="conversation-vide" class="empty-state">
+                        Posez votre première question, par exemple :
+                        « Quel est le chemin critique ? »
+                    </p>
+                    {% endfor %}
+                </div>
+
+                <div class="actions-bar chat-suggestions" aria-label="Questions suggérées">
+                    <button class="btn btn-secondary btn-sm" type="button" data-question="Quel est le chemin critique ?">Quel est le chemin critique ?</button>
+                    <button class="btn btn-secondary btn-sm" type="button" data-question="Comment raccourcir le projet ?">Comment raccourcir le projet ?</button>
+                    <button class="btn btn-secondary btn-sm" type="button" data-question="Quelles tâches ont le plus de marge ?">Quelles tâches ont le plus de marge ?</button>
+                </div>
+
+                <form id="formulaire-chat" class="form-card chat-formulaire" method="post" action="{{ message_url }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="field">
+                        <label for="message">Votre message</label>
+                        <textarea id="message" name="message" maxlength="1000" required
+                                  placeholder="Ex. : Pourquoi la tâche B est-elle critique ?"
+                                  {% if not projet %}disabled{% endif %}></textarea>
+                        <span class="field-hint">Écriture libre · 1000 caractères maximum · pas de limite de questions.</span>
+                    </div>
+                    <div class="form-actions">
+                        <button id="bouton-envoi" class="btn btn-primary" type="submit" {% if not projet %}disabled{% endif %}>Envoyer le message</button>
+                        <span id="compteur" class="chat-compteur" aria-live="off">0 / 1000</span>
+                    </div>
+                </form>
+            </section>
+        </div>
+
+        <hr class="divider">
+        <p class="meta">
+            L'assistant explique le planning calculé par le moteur PERT/CPM : durée
+            totale, chemin critique, marges, dépendances, risques et pistes
+            d'optimisation. Il ne fournit ni date absolue, ni estimation de
+            ressources, ni pronostic chiffré.
+        </p>
+    </main>
+</div>
+
+<script>
+(function () {
+    'use strict';
+    var url = {{ message_url|tojson }};
+    var form = document.getElementById('formulaire-chat');
+    var champ = document.getElementById('message');
+    var conversation = document.getElementById('conversation');
+    var vide = document.getElementById('conversation-vide');
+    var bouton = document.getElementById('bouton-envoi');
+    var compteur = document.getElementById('compteur');
+    var select = document.getElementById('projet-select');
+
+    function token() {
+        var meta = document.querySelector('meta[name="csrf-token"]');
+        return meta ? meta.getAttribute('content') : '';
+    }
+
+    function ajouterBulle(classe, texte) {
+        if (vide) { vide.remove(); vide = null; }
+        var bulle = document.createElement('div');
+        bulle.className = 'chat-bulle ' + classe;
+        var contenu = document.createElement('div');
+        contenu.className = 'chat-texte';
+        contenu.textContent = texte;
+        bulle.appendChild(contenu);
+        conversation.appendChild(bulle);
+        conversation.scrollTop = conversation.scrollHeight;
+        return bulle;
+    }
+
+    function ajouterListe(parent, titre, valeurs) {
+        if (!Array.isArray(valeurs) || valeurs.length === 0) { return; }
+        var details = document.createElement('details');
+        details.className = 'chat-sources';
+        var summary = document.createElement('summary');
+        summary.textContent = titre;
+        details.appendChild(summary);
+        var liste = document.createElement('ul');
+        valeurs.forEach(function (valeur) {
+            var element = document.createElement('li');
+            element.textContent = String(valeur);
+            liste.appendChild(element);
+        });
+        details.appendChild(liste);
+        parent.appendChild(details);
+    }
+
+    function ajouterReponse(donnees) {
+        var bulle = ajouterBulle('chat-bulle--ai', donnees.texte || '');
+        var meta = document.createElement('div');
+        meta.className = 'chat-meta';
+        if (donnees.intention) {
+            var intention = document.createElement('span');
+            intention.className = 'badge badge-info';
+            intention.textContent = String(donnees.intention);
+            meta.appendChild(intention);
+        }
+        ajouterListe(meta, 'Sources des chiffres', donnees.sources);
+        bulle.appendChild(meta);
+    }
+
+    function messageErreur(statut, donnees) {
+        if (statut === 403) { return "Accès refusé : ce projet ne vous est pas accessible."; }
+        if (statut === 400) { return (donnees && donnees.erreur) ? donnees.erreur : 'Message ou projet invalide.'; }
+        if (statut === 500) { return 'Erreur serveur : veuillez réessayer dans quelques instants.'; }
+        return (donnees && donnees.erreur) ? donnees.erreur : ('Une erreur est survenue (code ' + statut + ').');
+    }
+
+    function mettreAJourCompteur() {
+        if (compteur) { compteur.textContent = champ.value.length + ' / 1000'; }
+    }
+
+    if (compteur) { champ.addEventListener('input', mettreAJourCompteur); }
+
+    if (select) {
+        select.addEventListener('change', function () {
+            var params = new URLSearchParams();
+            params.set('projet', select.value);
+            window.location.href = window.location.pathname + '?' + params.toString();
+        });
+    }
+
+    form.addEventListener('submit', function (evenement) {
+        evenement.preventDefault();
+        var message = champ.value.trim();
+        if (!message || !select) { return; }
+        ajouterBulle('chat-bulle--user', message);
+        champ.value = '';
+        mettreAJourCompteur();
+        bouton.disabled = true;
+
+        fetch(url, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': token()
+            },
+            body: JSON.stringify({message: message, projet_id: select.value})
+        }).then(function (reponse) {
+            return reponse.json().catch(function () { return {}; })
+                .then(function (donnees) { return {statut: reponse.status, donnees: donnees}; });
+        }).then(function (resultat) {
+            if (resultat.statut < 200 || resultat.statut >= 300) {
+                ajouterBulle('chat-bulle--erreur', messageErreur(resultat.statut, resultat.donnees));
+                return;
+            }
+            ajouterReponse(resultat.donnees);
+        }).catch(function () {
+            ajouterBulle('chat-bulle--erreur', 'Impossible de contacter le serveur. Vérifiez votre connexion puis réessayez.');
+        }).finally(function () {
+            bouton.disabled = false;
+            champ.focus();
+        });
+    });
+
+    document.querySelectorAll('.chat-suggestions button').forEach(function (boutonSuggestion) {
+        boutonSuggestion.addEventListener('click', function () {
+            if (!select) { return; }
+            champ.value = boutonSuggestion.getAttribute('data-question') || '';
+            mettreAJourCompteur();
+            champ.focus();
+            if (typeof form.requestSubmit === 'function') {
+                form.requestSubmit();
+            } else {
+                form.dispatchEvent(new Event('submit', {bubbles: true, cancelable: true}));
+            }
+        });
+    });
+})();
+</script>
+</body>
+</html>

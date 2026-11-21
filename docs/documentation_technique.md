@@ -412,3 +412,39 @@ Le blueprint `ia_gestion` (`routes_ia_gestion.py`, préfixe `/projects`) ajoute 
 **Confirmation renforcée.** La route d'action régénère toujours la proposition depuis le champ `texte` avec `preparer_action()` puis `valider_action()` : aucun payload caché n'est cru. L'étape `preparer` n'écrit rien. L'étape `executer` exige `confirmer == proposition['confirmation_requise']`, soit `CONFIRMER`, soit **`SUPPRIMER`** pour une action destructrice. Seules quatre opérations sont exécutables (`modifier_duree`, `ajouter_tache`, `ajouter_predecesseur`, `supprimer_tache`) ; toute erreur de validation annule l'exécution. Après commit, le planning est systématiquement recalculé par `logic.pert.compute` et la nouvelle durée est affichée.
 
 **Traçabilité.** Les audits `IA_RISQUE_STATUT`, `IA_ACTION_EXECUTEE` et `IA_RAPPORT_INTELLIGENT` ne contiennent que des identifiants et des types (`project_id`, `alerte_id`, `statut`, `type`, `cible`) : ni texte libre, ni commentaire, ni demande utilisateur. Le rapport intelligent expose explicitement ses données de référence, ses hypothèses, ses avertissements et sa source « moteur PERT/CPM » ; sans clé API, `appreciation_ia` vaut `None` et la synthèse reste complète. Le PV de recette associé figure dans `docs/recette_ia.md`.
+
+## 20. Catalogue, conseils maison, discussion et session mémorisée
+
+### 20.1 Catalogue de projets
+
+`logic/catalogue.py` définit `CATALOGUE`, **12 projets types** (construction, logiciel, événement, marketing, recherche, agriculture, entreprise, formation, audiovisuel, santé, culture, web). Chaque modèle est un graphe figé `{code: {description, duree, depend_de}}` au format du moteur. `valider_catalogue()` appelle `logic.pert.compute` sur les 12 graphes **à l'import du module** ; `get_projet()` revalide la fiche demandée. Tout cycle, prédécesseur inconnu ou durée invalide lève `ValueError` avant le démarrage de l'application.
+
+Le blueprint `catalogue` (`routes_catalogue.py`, préfixe `/catalogue`) expose :
+
+| Méthode | Chemin | Accès | Comportement |
+|---|---|---|---|
+| GET | `/catalogue/` | public | Liste des 12 projets avec durée calculée par `compute` et statistiques (nombre de projets, de catégories, durée moyenne). |
+| GET | `/catalogue/<projet_id>` | public | Fiche : résumé, tableau PERT et chemin critique recalculés ; 404 pour un identifiant inconnu. |
+| POST | `/catalogue/<projet_id>/optimiser` | connecté | Bouton « 🚀 Optimiser ce projet » : copie du modèle dans le compte courant puis ouverture de la simulation. |
+
+La copie est créée par `catalogue_logic.optimiser(user_id)` : `Project`, `Task` et `Dependency` sont inscrits en base **avec les durées d'origine**, sans optimisation numérique ; un `AuditLog(action='CATALOGUE_OPTIMISE')` est ajouté si le journal est disponible. La redirection mène à `projects.optimisation` pour simuler des réductions ; le planning de référence n'est pas modifié sans action explicite. Le POST exige `login_required` et le jeton CSRF global.
+
+Dans la barre de navigation, les liens **Démo** et **Saisie** ont été retirés et le lien **🧰 Catalogue** ajouté. `/demo` et `/saisie` restent joignables (bouton de l'accueil, lien « Voir la démo » du catalogue ou URL directe).
+
+### 20.2 Conseils IA maison automatiques
+
+`services/conseiller.py` fournit `generer_conseils(resultat_pert, taches)`, un moteur déterministe de **8 règles** : `R01` chemin critique unique, `R02` chemins critiques multiples, `R03` tâche critique à plusieurs successeurs, `R04` forte densité de dépendances, `R05` jalons terminaux, `R06` marge libre nulle et marge totale positive, `R07` démarrages indépendants multiples, `R08` durée totale nulle. Chaque conseil est un dictionnaire `{id_regle, titre, gravite, explication, preuve, action}` (`critical`, `warning` ou `info`), trié par gravité puis identifiant de règle.
+
+Les preuves reprennent uniquement des valeurs issues de `PERTResult` (durée totale, marges, décomptes de tâches/chemins, successeurs) ou du graphe validé : aucun appel réseau, aucune clé API et aucune valeur inventée. Le partial `templates/ia/_conseils_ia.html` affiche la section « 💡 Conseils de l'IA maison » dès qu'un résultat PERT est disponible sur **`/demo`**, **`/resultats_custom`** (app.py) et la **page d'optimisation** (`routes_projects.py`). Une page dédiée `/projects/<int:project_id>/conseils` (`routes_conseiller.py`) est réservée au propriétaire (404 sinon) et recalcule elle aussi le planning avant d'afficher les conseils.
+
+### 20.3 Assistant IA conversationnel (`/ia/discussion`)
+
+Le blueprint `chat_ia` (`routes_chat_ia.py`, préfixe `/ia`) ajoute `GET /ia/discussion`, `POST /ia/discussion/message` (JSON ou formulaire) et `GET /ia/discussion/historique`. Toutes les routes exigent une session ; `user_can_access()` est vérifié avant tout accès au projet (403). Le message est limité à 1 000 caractères et les valeurs calculées envoyées par le client sont ignorées : le serveur rejoue `project_to_taches()` puis `logic.pert.compute` à chaque message.
+
+`services/chat_ia.py` reconnaît **16 intentions** : `salutation`, `chemin_critique`, `duree_totale`, `marges`, `tache_precise`, `optimisation`, `dependances`, `risques`, `explication_pert`, `aide`, `projet`, `scenario_date`, `remerciement`, `hors_cadre`, `tache_inconnue`, `sans_taches`. `repondre()` renvoie `{texte, intention, sources}` ; les `sources` citent les chiffres réellement lus dans le résultat PERT, et les intentions sans chiffre renvoient une liste vide. Aucun appel à un service externe, aucune clé API et **aucun quota** : le limiteur `IA_MAX_APPELS_PAR_HEURE` du §19 concerne uniquement l'ancien assistant.
+
+L'historique est propre à cette discussion : 20 messages maximum par projet dans la session Flask (`chat_ia_historique`), texte tronqué à 1 000 caractères ; l'historique fourni par le client n'est pas accepté. L'audit `CHAT_IA` ne conserve que `project_id` et l'identifiant d'intention, jamais le texte. Le lien « Assistant IA » de la navigation mène à `/ia/discussion` (avec filtre sur le projet récent) ; l'ancien assistant par projet `/ia/projets/<id>/assistant` reste accessible depuis le bouton « 🤖 Assistant IA » de la fiche projet.
+
+### 20.4 « Se souvenir de moi »
+
+Les cases `remember` des gabarits `auth/login.html` et `auth/register.html` sont lues par `routes_auth.py` : `login_user(user, remember=bool(request.form.get('remember')))` est appelé aussi bien à la **connexion** (`/login`) qu'à la **création de compte** (`/register`). Lorsque la case est cochée, Flask-Login pose le cookie persistant `remember_token` ; la déconnexion (`/logout`) le supprime. Aucune durée spécifique n'est configurée dans `config.py` : c'est le réglage par défaut de Flask-Login qui s'applique.

@@ -13,12 +13,9 @@
     <header class="topbar">
         <a class="topbar-brand" href="{{ url_for('accueil') }}"><span class="topbar-brand-icon">📊</span> PERT/CPM</a>
         <ul class="topbar-nav">
+            <li><a href="{{ url_for('catalogue.index') }}">🧰 Catalogue</a></li>
             {% if current_user.is_authenticated %}
-            <li><a href="/">🏠 Accueil</a></li>
-            {% endif %}
-            <li><a href="/demo">📊 Démo (12 tâches)</a></li>
-            <li><a href="/saisie">✏️ Saisie des tâches</a></li>
-            {% if current_user.is_authenticated %}
+            <li><a href="{{ url_for('accueil') }}">🏠 Accueil</a></li>
             <li><a href="{{ url_for('auth.profile') }}">👤 Mon compte</a></li>
             <li><a href="{{ url_for('projects.list_projects') }}">📁 Mes projets</a></li>
             <li>
@@ -35,12 +32,15 @@
 
     <main class="container">
         {% set nom_utilisateur = current_user.username | default('', true) | trim %}
-        <div class="page-header">
-            <div>
-                <h1 class="page-title">👋 Bienvenue, {{ nom_utilisateur if nom_utilisateur else 'cher utilisateur' }} !</h1>
-                <p class="page-subtitle">🚀 PERT/CPM : pilotez vos projets avec précision — de la liste de tâches au chemin critique, en quelques clics</p>
+        <section class="accueil-hero">
+            <h1>👋 Bienvenue, {{ nom_utilisateur if nom_utilisateur else 'cher utilisateur' }} !</h1>
+            <p class="subtitle">🚀 PERT/CPM : pilotez vos projets avec précision — de la liste de tâches au chemin critique, en quelques clics</p>
+            <div class="hero-badges" aria-label="Points forts de l'application">
+                <span class="badge">🧩 Modélisation PERT</span>
+                <span class="badge">🔥 Chemin critique</span>
+                <span class="badge">📈 Optimisation CPM</span>
             </div>
-        </div>
+        </section>
 
         <div class="stat-grid">
             <div class="stat-card stat-card--primary">
@@ -56,6 +56,66 @@
                 <strong class="stat-value">Projets persistants</strong>
             </div>
         </div>
+
+        <section class="catalogue-hero" aria-labelledby="apercu-catalogue-titre">
+            <div class="catalogue-hero__head">
+                <div>
+                    <h2 id="apercu-catalogue-titre" class="section-title mt-0">🧰 Un catalogue de projets prêts à optimiser</h2>
+                    <p class="text-muted mb-0">
+                        Construction, événement, logiciel… choisissez un modèle : les durées et les dépendances
+                        sont déjà prêtes, le calcul PERT/CPM est effectué par l'application.
+                    </p>
+                </div>
+                <a class="btn btn-primary" href="{{ url_for('catalogue.index') }}">Voir les 12 projets →</a>
+            </div>
+
+            <div class="catalogue-apercu">
+                <article class="card catalogue-card">
+                    <div class="card-body">
+                        <div class="d-flex align-center gap-2 flex-wrap">
+                            <span class="catalogue-icone" aria-hidden="true">🏗️</span>
+                            <span class="badge badge-info">Construction</span>
+                            <span class="badge badge-difficulte badge-difficulte--difficile">Difficile</span>
+                        </div>
+                        <h3 class="card-title mt-3">Construction d'une maison individuelle</h3>
+                        <p class="text-muted">Du choix du terrain à la remise des clés : permis, gros œuvre, second œuvre et finitions.</p>
+                    </div>
+                    <div class="card-footer">
+                        <a class="btn btn-sm btn-secondary" href="{{ url_for('catalogue.detail', projet_id='construction-maison') }}">Voir le projet</a>
+                    </div>
+                </article>
+
+                <article class="card catalogue-card">
+                    <div class="card-body">
+                        <div class="d-flex align-center gap-2 flex-wrap">
+                            <span class="catalogue-icone" aria-hidden="true">💍</span>
+                            <span class="badge badge-info">Événement</span>
+                            <span class="badge badge-difficulte badge-difficulte--intermediaire">Intermédiaire</span>
+                        </div>
+                        <h3 class="card-title mt-3">Organisation d'un mariage</h3>
+                        <p class="text-muted">De la réservation du lieu au jour J : traiteur, invitations, tenues, décoration et musique.</p>
+                    </div>
+                    <div class="card-footer">
+                        <a class="btn btn-sm btn-secondary" href="{{ url_for('catalogue.detail', projet_id='mariage') }}">Voir le projet</a>
+                    </div>
+                </article>
+
+                <article class="card catalogue-card">
+                    <div class="card-body">
+                        <div class="d-flex align-center gap-2 flex-wrap">
+                            <span class="catalogue-icone" aria-hidden="true">📱</span>
+                            <span class="badge badge-info">Logiciel</span>
+                            <span class="badge badge-difficulte badge-difficulte--difficile">Difficile</span>
+                        </div>
+                        <h3 class="card-title mt-3">Lancement d'une application mobile</h3>
+                        <p class="text-muted">Cadrage produit, design, développement iOS/Android, tests et publication sur les stores.</p>
+                    </div>
+                    <div class="card-footer">
+                        <a class="btn btn-sm btn-secondary" href="{{ url_for('catalogue.detail', projet_id='application-mobile') }}">Voir le projet</a>
+                    </div>
+                </article>
+            </div>
+        </section>
 
         <section class="card card-accent card-accent--primary mt-4">
             <div class="card-body">
@@ -120,8 +180,8 @@
         </div>
 
         <div class="actions-bar">
-            <a href="/demo" class="btn btn-primary btn-lg">📊 Découvrir la démo (12 tâches)</a>
-            <a href="/saisie" class="btn btn-secondary btn-lg">✏️ Saisir vos tâches</a>
+            <a href="{{ url_for('catalogue.index') }}" class="btn btn-primary btn-lg">🧰 Explorer le catalogue</a>
+            <a href="/demo" class="btn btn-secondary btn-lg">📊 Découvrir la démo (12 tâches)</a>
         </div>
 
         <hr class="divider">

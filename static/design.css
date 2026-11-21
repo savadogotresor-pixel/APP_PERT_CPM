@@ -56,9 +56,12 @@
   --radius: 12px;
   --radius-sm: 8px;
   --radius-lg: 16px;
-  --shadow: 0 1px 3px rgba(15, 23, 42, 0.08), 0 1px 2px rgba(15, 23, 42, 0.06);
-  --shadow-lg: 0 10px 25px -5px rgba(15, 23, 42, 0.14),
-               0 8px 10px -6px rgba(15, 23, 42, 0.08);
+  --shadow: 0 1px 2px rgba(15, 23, 42, 0.06),
+            0 4px 12px -6px rgba(15, 23, 42, 0.14);
+  --shadow-md: 0 10px 20px -10px rgba(15, 23, 42, 0.28),
+               0 3px 8px -4px rgba(15, 23, 42, 0.12);
+  --shadow-lg: 0 18px 38px -18px rgba(15, 23, 42, 0.36),
+               0 8px 14px -10px rgba(15, 23, 42, 0.18);
 
   /* Échelle d'espacement (base 4px) */
   --space-1: 0.25rem;
@@ -222,7 +225,11 @@ hr {
   gap: var(--space-4);
   min-height: 66px;
   padding: var(--space-3) var(--space-5);
-  background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary) 100%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.16);
+  background:
+    radial-gradient(circle at 12% -60%, rgba(56, 189, 248, 0.28), transparent 55%),
+    radial-gradient(circle at 88% 160%, rgba(251, 191, 36, 0.16), transparent 50%),
+    linear-gradient(115deg, #172554 0%, var(--primary-dark) 34%, var(--primary) 76%, #1d4ed8 100%);
   box-shadow: var(--shadow-lg);
 }
 
@@ -308,14 +315,20 @@ hr {
 }
 
 .page-header {
+  position: relative;
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
   justify-content: space-between;
   gap: var(--space-4);
   margin: var(--space-5) 0;
-  padding-bottom: var(--space-4);
-  border-bottom: 1px solid var(--border);
+  padding: var(--space-4) var(--space-5);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background:
+    radial-gradient(circle at 92% 0%, rgba(8, 145, 178, 0.10), transparent 52%),
+    linear-gradient(135deg, var(--surface) 0%, var(--surface-alt) 100%);
+  box-shadow: var(--shadow);
 }
 
 .page-title {
@@ -412,6 +425,20 @@ hr {
   border-radius: var(--radius);
   background: var(--surface);
   box-shadow: var(--shadow);
+  transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
+}
+
+.card:hover {
+  /* On ne touche pas à border-left : il porte l'accent des .card-accent. */
+  border-top-color: var(--border-strong);
+  border-right-color: var(--border-strong);
+  border-bottom-color: var(--border-strong);
+  box-shadow: var(--shadow-md);
+}
+
+.card-grid > .card:hover,
+.catalogue-card:hover {
+  transform: translateY(-3px);
 }
 
 .card-header {
@@ -460,6 +487,47 @@ hr {
 
 .card-grid > .card {
   margin-bottom: 0;
+}
+
+/* Entrée douce : « backwards » garde l'état initial pendant le délai mais
+   rend la main aux règles de survol une fois l'animation terminée. */
+@keyframes entree-douce {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.page-header,
+.card-grid > .card {
+  animation: entree-douce 0.45s ease-out backwards;
+}
+
+.card-grid > .card:nth-child(2) { animation-delay: 0.05s; }
+.card-grid > .card:nth-child(3) { animation-delay: 0.1s; }
+.card-grid > .card:nth-child(n+4) { animation-delay: 0.15s; }
+
+@media (prefers-reduced-motion: reduce) {
+  .page-header,
+  .card-grid > .card {
+    animation: none;
+  }
+
+  .card,
+  .btn {
+    transition: none;
+  }
+
+  .card:hover,
+  .card-grid > .card:hover,
+  .catalogue-card:hover,
+  .btn:hover {
+    transform: none;
+  }
 }
 
 /* Bordure d'accent à gauche : cyan par défaut. */
@@ -686,6 +754,108 @@ hr {
   border-color: #a7f3d0;
   background: #d1fae5;
   color: #065f46;
+}
+
+/* ==========================================================================
+    5bis. CATALOGUE — cartes de projets types, difficulté, mise en avant
+    ========================================================================== */
+
+/* Grille plus dense que .card-grid pour le catalogue complet. */
+.catalogue-grid {
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+}
+
+.catalogue-card {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.catalogue-card .card-body {
+  flex: 1 1 auto;
+}
+
+.catalogue-card .card-footer {
+  justify-content: flex-start;
+  border-top: 1px solid var(--border);
+}
+
+/* Pastille d'icône des projets types. */
+.catalogue-icone {
+  display: inline-grid;
+  place-items: center;
+  width: 3rem;
+  height: 3rem;
+  flex: none;
+  border: 1px solid rgba(37, 99, 235, 0.12);
+  border-radius: 14px;
+  background: linear-gradient(135deg, var(--primary-soft), var(--accent-soft));
+  font-size: 1.55rem;
+  line-height: 1;
+}
+
+/* Badge de difficulté : déclinaisons optionnelles en plus des badges génériques. */
+.badge-difficulte {
+  border-color: #fde68a;
+  background: var(--warning-soft);
+  color: var(--warning-dark);
+}
+
+.badge-difficulte--facile {
+  border-color: #a7f3d0;
+  background: var(--success-soft);
+  color: var(--success-dark);
+}
+
+.badge-difficulte--intermediaire {
+  border-color: #fde68a;
+  background: var(--warning-soft);
+  color: var(--warning-dark);
+}
+
+.badge-difficulte--difficile {
+  border-color: #fecaca;
+  background: var(--danger-soft);
+  color: #991b1b;
+}
+
+/* Bloc de mise en avant du catalogue (accueil). */
+.catalogue-hero {
+  position: relative;
+  margin: var(--space-5) 0;
+  padding: var(--space-5);
+  overflow: hidden;
+  border: 1px solid #c7d2fe;
+  border-radius: var(--radius-lg);
+  background:
+    radial-gradient(circle at 92% 8%, rgba(245, 158, 11, 0.16), transparent 46%),
+    linear-gradient(135deg, var(--primary-soft) 0%, #f5f3ff 55%, var(--accent-soft) 100%);
+  box-shadow: var(--shadow);
+}
+
+.catalogue-hero > * {
+  position: relative;
+  z-index: 1;
+}
+
+.catalogue-hero::before {
+  content: '';
+  position: absolute;
+  top: -80px;
+  right: -40px;
+  width: 240px;
+  height: 240px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(37, 99, 235, 0.14), transparent 70%);
+  pointer-events: none;
+}
+
+.catalogue-hero__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
 }
 
 /* ==========================================================================
@@ -1273,6 +1443,10 @@ table.data-table tbody tr.row-critical:hover {
     flex-direction: column;
   }
 
+  .catalogue-hero {
+    padding: var(--space-4);
+  }
+
   .card-grid,
   .form-grid {
     grid-template-columns: 1fr;
@@ -1334,6 +1508,10 @@ table.data-table tbody tr.row-critical:hover {
 
   .page-title {
     font-size: 1.5rem;
+  }
+
+  .catalogue-hero {
+    padding: var(--space-4) var(--space-3);
   }
 
   .section-title {

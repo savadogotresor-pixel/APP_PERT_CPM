@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ projet.titre }} — Catalogue PERT/CPM</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        /* Spécifique à la fiche catalogue : rend le chemin critique évident. */
+        .catalogue-resume { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .75rem; }
+        .catalogue-chemin {
+            display: inline-block; margin: .2rem .35rem .2rem 0; padding: .45rem .7rem;
+            border-radius: 999px; background: rgba(239, 68, 68, .10);
+            color: var(--danger, #b91c1c); font-weight: 600;
+        }
+        .catalogue-action {
+            display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+            gap: 1rem; margin: 1.5rem 0;
+        }
+        .catalogue-action p { margin: 0; }
+    </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='design.css') }}">
+</head>
+<body>
+<div class="app-shell">
+    <header class="topbar">
+        <a class="topbar-brand" href="{{ accueil_url }}"><span class="topbar-brand-icon">📊</span> PERT/CPM</a>
+        <ul class="topbar-nav">
+            <li><a href="{{ url_for('catalogue.index') }}">🧰 Catalogue</a></li>
+            {% if current_user.is_authenticated %}
+            <li><a href="{{ accueil_url }}">Accueil</a></li>
+            <li><a href="{{ mes_projets_url }}">Mes projets</a></li>
+            <li><a href="{{ profil_url }}">Profil</a></li>
+            <li><a href="{{ deconnexion_url }}">Déconnexion</a></li>
+            {% endif %}
+        </ul>
+    </header>
+
+    <main class="container">
+        <ul class="breadcrumb">
+            <li><a href="{{ url_for('catalogue.index') }}">🧰 Catalogue</a></li>
+            <li>{{ projet.titre }}</li>
+        </ul>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+            <div class="flashes">
+                {% for categorie, message in messages %}
+                {% set alert_class = 'alert-success' if categorie == 'success' else ('alert-danger' if categorie == 'error' or categorie == 'danger' else ('alert-warning' if categorie == 'warning' else 'alert-info')) %}
+                <div class="alert {{ alert_class }} flash mp-flash mp-flash-{{ categorie }}">{{ message }}</div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        {% endwith %}
+
+        <div class="page-header">
+            <div>
+                <h1 class="page-title">{{ projet.icone }} {{ projet.titre }}</h1>
+                <p class="page-subtitle">{{ projet.description }}</p>
+                <div class="catalogue-resume">
+                    <span class="badge badge-info">{{ projet.categorie }}</span>
+                    {% if projet.difficulte == 'Facile' %}
+                    <span class="badge badge-success">{{ projet.difficulte }}</span>
+                    {% elif projet.difficulte == 'Difficile' %}
+                    <span class="badge badge-critical">{{ projet.difficulte }}</span>
+                    {% else %}
+                    <span class="badge badge-warning">{{ projet.difficulte }}</span>
+                    {% endif %}
+                    <span class="badge badge-muted">{{ projet.taches|length }} tâches</span>
+                </div>
+            </div>
+            <a class="btn btn-secondary" href="{{ url_for('catalogue.index') }}">← Tous les projets</a>
+        </div>
+
+        <div class="stat-grid mb-4">
+            <div class="stat-card stat-card--primary">
+                <span class="stat-icon" aria-hidden="true">⏱️</span>
+                <div class="stat-value">{{ resultat.duree_totale }} j</div>
+                <div class="stat-label">Durée totale calculée</div>
+            </div>
+            <div class="stat-card stat-card--danger">
+                <span class="stat-icon" aria-hidden="true">🔥</span>
+                <div class="stat-value">{{ resultat.chemins_critiques|length }}</div>
+                <div class="stat-label">Chemin(s) critique(s)</div>
+            </div>
+            <div class="stat-card stat-card--success">
+                <span class="stat-icon" aria-hidden="true">🧩</span>
+                <div class="stat-value">{{ projet.taches|length }}</div>
+                <div class="stat-label">Tâches du modèle</div>
+            </div>
+        </div>
+
+        <section class="card mb-4">
+            <div class="card-header">
+                <h2 class="card-title">🔥 Chemin critique</h2>
+            </div>
+            <div class="card-body">
+                {% if resultat.chemins_critiques %}
+                    {% for chemin in resultat.chemins_critiques %}
+                    <span class="catalogue-chemin">{{ chemin|join(' → ') }}</span>
+                    {% endfor %}
+                {% else %}
+                    <p class="text-muted">Aucun chemin critique détecté.</p>
+                {% endif %}
+            </div>
+        </section>
+
+        <section class="card">
+            <div class="card-header">
+                <h2 class="card-title">📋 Détail des tâches</h2>
+            </div>
+            <div class="table-wrapper">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Code</th>
+                            <th>Description</th>
+                            <th>Durée</th>
+                            <th>Prédécesseurs</th>
+                            <th>Début (ES)</th>
+                            <th>Fin (EF)</th>
+                            <th>Marge totale</th>
+                            <th>Criticité</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for code in resultat.ordre %}
+                        {% set tache = projet.taches[code] %}
+                        {% set r = resultat.resultats[code] %}
+                        <tr class="{{ 'row-critical' if r.critique else '' }}">
+                            <td><strong>{{ code }}</strong></td>
+                            <td>{{ tache.description }}</td>
+                            <td>{{ tache.duree }} j</td>
+                            <td>{{ tache.depend_de|join(', ') if tache.depend_de else '—' }}</td>
+                            <td>{{ r.ES }}</td>
+                            <td>{{ r.EF }}</td>
+                            <td>{{ r.marge_totale }}</td>
+                            <td>
+                                {% if r.critique %}
+                                <span class="badge badge-critical">Critique</span>
+                                {% else %}
+                                <span class="badge badge-muted">Normale</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="card catalogue-action">
+            <div class="card-body">
+                <h2 class="card-title">🚀 Passer à l'optimisation</h2>
+                <p class="text-muted">
+                    Le projet est créé dans votre compte avec ces durées d'origine, puis la page
+                    d'optimisation s'ouvre pour simuler des réductions sans rien modifier au planning de référence.
+                    {% if not current_user.is_authenticated %}La connexion sera demandée automatiquement.{% endif %}
+                </p>
+            </div>
+            <div class="card-footer">
+                <form method="post" action="{{ url_for('catalogue.optimiser', projet_id=projet.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button class="btn btn-primary btn-lg" type="submit">🚀 Optimiser ce projet</button>
+                </form>
+            </div>
+        </section>
+    </main>
+</div>
+</body>
+</html>

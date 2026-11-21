@@ -38,6 +38,11 @@ def _url_projets():
     return _url_sure('projects.list_projects', '/projets')
 
 
+def _url_accueil():
+    """URL de l'accueil, destination par défaut après connexion/inscription."""
+    return _url_sure('accueil', '/')
+
+
 def _rendre(nom_template, **contexte):
     """Rend un template en lui fournissant toujours l'URL des projets."""
     contexte.setdefault('projects_url', _url_projets())
@@ -167,9 +172,9 @@ def register():
                 db.session.rollback()
                 flash("Impossible de créer le compte. Veuillez réessayer.", 'error')
             else:
-                login_user(user)
+                login_user(user, remember=bool(request.form.get('remember')))
                 flash("Compte créé avec succès. Bienvenue !", 'success')
-                return redirect(_url_projets())
+                return redirect(_url_accueil())
 
     return _rendre('auth/register.html', username=username, email=email)
 
@@ -201,7 +206,7 @@ def login():
         else:
             login_user(user, remember=bool(request.form.get('remember')))
             flash("Connexion réussie.", 'success')
-            return redirect(_cible_apres_connexion() or _url_projets())
+            return redirect(_cible_apres_connexion() or _url_accueil())
 
     return _rendre(
         'auth/login.html',

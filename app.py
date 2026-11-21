@@ -22,7 +22,10 @@ from logic.data import taches, parser_taches
 from logic.pert import compute, ValidationError
 from models import Dependency, Project, Task, User, init_db
 from routes_auth import auth_bp
+from routes_catalogue import catalogue_bp
+from routes_chat_ia import chat_ia_bp
 from routes_projects import projects_bp
+from services.conseiller import generer_conseils as generer_conseils_ia
 try:
     from routes_ia import ia_bp
 except ImportError:
@@ -98,6 +101,9 @@ except ImportError:
     app.logger.info("routes_conseiller indisponible : conseiller IA non enregistré.")
 else:
     app.register_blueprint(conseiller_bp)
+
+app.register_blueprint(catalogue_bp)
+app.register_blueprint(chat_ia_bp)
 
 
 @app.after_request
@@ -324,6 +330,7 @@ def demo():
     return render_template(
         'resultats.html',
         taches=taches,
+        conseils_ia=generer_conseils_ia(r, taches),
         resultats=r.resultats,
         chemin_critique=chemin_critique,
         chemins_critiques=r.chemins_critiques,
@@ -393,6 +400,7 @@ def resultats_custom():
     return render_template(
         'resultats.html',
         taches=taches_custom,
+        conseils_ia=generer_conseils_ia(r, taches_custom),
         resultats=resultats,
         chemin_critique=chemin_critique,
         chemins_critiques=r.chemins_critiques,

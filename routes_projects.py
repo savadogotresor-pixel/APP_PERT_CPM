@@ -829,6 +829,8 @@ def detail(project_id):
 @login_required
 def optimisation(project_id):
     """Simule des réductions de durée sans jamais modifier le planning source."""
+    from services.conseiller import generer_conseils
+
     projet = _projet_ou_404(project_id)
     taches = project_to_taches(projet)
 
@@ -839,6 +841,7 @@ def optimisation(project_id):
             flash(erreur, 'error')
         planning = None
 
+    conseils_ia = generer_conseils(planning, taches) if planning is not None else []
     resultats_initiaux = planning.resultats if planning is not None else {}
     taches_critiques = [
         code for code in sorted(taches)
@@ -948,6 +951,7 @@ def optimisation(project_id):
         durees_formulaire=durees_formulaire,
         chemins_critiques=planning.chemins_critiques if planning is not None else [],
         duree_totale=planning.duree_totale if planning is not None else None,
+        conseils_ia=conseils_ia,
         resultat=resultat_simulation,
         nom_scenario=nom_scenario,
         scenarios=scenarios,

@@ -571,10 +571,12 @@ def _creer_projet_depuis_wbs(wbs, taches):
 
 @ia_bp.app_context_processor
 def lien_assistant_navigation():
-    """Fournit un lien sûr vers l'assistant du projet le plus récent.
+    """Fournit un lien sûr vers l'espace de discussion libre du projet récent.
 
-    Sans projet (ou sur la page publique), le lien pointe vers la liste des
-    projets : la page d'accueil reste fonctionnelle pour tous les visiteurs.
+    Sans projet (ou sur la page publique), le lien pointe vers la discussion
+    sans filtre : la page d'accueil reste fonctionnelle pour tous les visiteurs.
+    Si le blueprint ``chat_ia`` n'est pas encore enregistré, l'ancien lien vers
+    l'assistant par projet est conservé.
     """
     projet = None
     if current_user.is_authenticated:
@@ -589,12 +591,22 @@ def lien_assistant_navigation():
             db.session.rollback()
             projet = None
     try:
+        # L'espace de discussion libre remplace l'ancien assistant dans la nav
+        # dès que son blueprint est enregistré (le coordonnateur le branche dans
+        # app.py). Le projet récent est transféré comme filtre ``?projet=``.
         url = (
-            url_for('ia.assistant', project_id=projet.id)
-            if projet is not None else url_for('projects.list_projects')
+            url_for('chat_ia.discussion', projet=projet.id)
+            if projet is not None else url_for('chat_ia.discussion')
         )
     except BuildError:
-        url = '/projects/'
+        # Blueprint pas encore enregistré : comportement historique conservé.
+        try:
+            url = (
+                url_for('ia.assistant', project_id=projet.id)
+                if projet is not None else url_for('projects.list_projects')
+            )
+        except BuildError:
+            url = '/projects/'
     return {'assistant_projet_recent': projet, 'assistant_url': url}
 
 
