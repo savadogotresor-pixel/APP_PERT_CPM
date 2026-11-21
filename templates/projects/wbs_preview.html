@@ -6,78 +6,82 @@
     <title>{% if apercu %}Aperçu WBS{% else %}Générer un projet avec l'IA{% endif %} — PERT/CPM</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <style>
-        .wbs-page { max-width: 1180px; }
-        .wbs-nav { justify-content: flex-end; }
-        .wbs-flash { padding: 10px 14px; border-radius: 6px; margin-bottom: 10px; font-size: .9rem; }
-        .wbs-flash-success { background: #dcfce7; color: #166534; }
-        .wbs-flash-error { background: #fee2e2; color: #991b1b; }
-        .wbs-bandeau { background: #eff6ff; border-left: 4px solid #2563eb; color: #1e3a8a; padding: 12px 16px; border-radius: 6px; margin: 16px 0; line-height: 1.5; }
-        .wbs-bandeau span { display: block; font-size: .88rem; margin-top: 4px; }
-        .wbs-carte { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 14px 18px; margin: 12px 0; }
-        .wbs-carte h2 { margin-top: 0; font-size: 1.1rem; }
-        .wbs-erreurs { background: #fef2f2; border-left: 4px solid #dc2626; color: #991b1b; padding: 12px 16px; border-radius: 6px; margin: 12px 0; }
-        .wbs-form label { display: block; font-weight: 600; margin: 12px 0 4px; }
-        .wbs-form textarea { width: 100%; min-height: 90px; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font: inherit; resize: vertical; }
-        .wbs-btn { background: #2563eb; color: #fff; border: 0; border-radius: 6px; padding: 10px 16px; font-weight: 600; cursor: pointer; }
-        .wbs-btn:hover { background: #1d4ed8; }
-        .wbs-table { width: 100%; border-collapse: collapse; font-size: .85rem; background: #fff; }
-        .wbs-table th, .wbs-table td { border: 1px solid #d1d5db; padding: 7px 8px; vertical-align: top; }
-        .wbs-table thead th { background: #f3f4f6; }
-        .wbs-table input { width: 100%; box-sizing: border-box; padding: 5px 6px; border: 1px solid #d1d5db; border-radius: 4px; font: inherit; }
+        /* Styles réellement spécifiques à l'aperçu WBS (le reste est dans design.css). */
+        .wbs-table input { width: 100%; padding: 5px 6px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); font: inherit; }
         .wbs-table input[type=number] { max-width: 90px; }
-        .wbs-phase th { background: #1e3a8a; color: #fff; text-align: left; font-size: .95rem; }
-        .wbs-livrables td { background: #f8fafc; color: #334155; font-style: italic; }
-        .wbs-jalon { color: #92400e; white-space: nowrap; font-size: .8rem; }
-        .wbs-confirmation { display: flex; align-items: center; gap: 8px; margin: 18px 0 10px; font-weight: 600; }
-        .wbs-confirmation input { width: 18px; height: 18px; }
-        .wbs-meta { color: #6b7280; font-size: .88rem; }
-        .wbs-listes { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+        .wbs-phase th { background: var(--primary-dark); color: #fff; text-align: left; font-size: .95rem; }
+        .wbs-livrables td { background: var(--surface-alt); color: var(--muted); font-style: italic; }
+        .wbs-level-2 > td:first-child { padding-left: 2.5rem; }
+        .wbs-form .field { grid-column: 1 / -1; }
+        .wbs-jalon { white-space: nowrap; }
+        .wbs-bandeau span { display: block; margin-top: 4px; font-size: .88rem; }
     </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='design.css') }}">
 </head>
 <body>
-    <nav class="nav wbs-nav">
-        <a href="{{ url_for('accueil') }}">Accueil</a>
-        <a href="{{ url_for('projects.list_projects') }}">Mes projets</a>
-        {% if current_user.is_authenticated %}
-        <a href="{{ url_for('auth.logout') }}">Déconnexion</a>
-        {% endif %}
-    </nav>
+<div class="app-shell">
+    <header class="topbar">
+        <a class="topbar-brand" href="{{ url_for('accueil') }}"><span class="topbar-brand-icon">📊</span> PERT/CPM</a>
+        <ul class="topbar-nav">
+            <li><a href="{{ url_for('accueil') }}">Accueil</a></li>
+            <li><a href="{{ url_for('projects.list_projects') }}">Mes projets</a></li>
+            {% if current_user.is_authenticated %}
+            <li><a href="{{ url_for('auth.logout') }}">Déconnexion</a></li>
+            {% endif %}
+        </ul>
+    </header>
 
-    <main class="wbs-page">
-        <h1>🧱 Génération d'un projet avec l'IA</h1>
+    <main class="container wbs-page">
+        <div class="page-header">
+            <div>
+                <h1 class="page-title">🧱 Génération d'un projet avec l'IA</h1>
+                <p class="page-subtitle">Proposition de WBS éditable, enregistrée uniquement après votre validation.</p>
+            </div>
+        </div>
 
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
+            <div class="flashes">
                 {% for categorie, message in messages %}
-                <div class="wbs-flash wbs-flash-{{ categorie }}">{{ message }}</div>
+                {% set alert_class = 'alert-success' if categorie == 'success' else ('alert-danger' if categorie == 'error' or categorie == 'danger' else ('alert-warning' if categorie == 'warning' else 'alert-info')) %}
+                <div class="alert {{ alert_class }} flash wbs-flash wbs-flash-{{ categorie }}">{{ message }}</div>
                 {% endfor %}
+            </div>
             {% endif %}
         {% endwith %}
 
         {% if apercu %}
-        <div class="wbs-bandeau">
-            <strong>Proposition indicative générée par règles : à modifier et valider avant enregistrement. Aucune donnée n'est.enregistrée sans confirmation explicite.</strong>
-            <span>Aucune donnée n'est enregistrée sans confirmation explicite.</span>
+        <div class="alert alert-warning wbs-bandeau" role="status">
+            <div>
+                <strong>Proposition indicative générée par règles : à modifier et valider avant enregistrement. La WBS n'est pas enregistrée tant que vous ne l'avez pas validée explicitement.</strong>
+                <span>Aucune donnée n'est enregistrée sans confirmation explicite.</span>
+            </div>
         </div>
 
-        <div class="wbs-carte">
-            <h2>Objectif et contraintes</h2>
-            <p><strong>Objectif :</strong> {{ apercu.objectif }}</p>
-            <p><strong>Contraintes :</strong> {{ apercu.contraintes or 'Aucune contrainte renseignée.' }}</p>
-            <p class="wbs-meta">
-                Source : {{ apercu.source }} — {{ apercu.nb_taches }} tâche(s) proposée(s)
-                &nbsp;·&nbsp; limite : {{ limite_appels }} génération(s)/heure.
-            </p>
+        <div class="card wbs-carte">
+            <div class="card-header">
+                <h2 class="card-title">Objectif et contraintes</h2>
+            </div>
+            <div class="card-body">
+                <p><strong>Objectif :</strong> {{ apercu.objectif }}</p>
+                <p><strong>Contraintes :</strong> {{ apercu.contraintes or 'Aucune contrainte renseignée.' }}</p>
+                <p class="meta wbs-meta">
+                    Source : {{ apercu.source }} — {{ apercu.nb_taches }} tâche(s) proposée(s)
+                    &nbsp;·&nbsp; limite : {{ limite_appels }} génération(s)/heure.
+                </p>
+            </div>
         </div>
 
         {% if erreurs %}
-        <div class="wbs-erreurs">
-            <strong>Anomalies détectées — corrigez-les avant enregistrement :</strong>
-            <ul>
-                {% for erreur in erreurs %}
-                <li>{{ erreur }}</li>
-                {% endfor %}
-            </ul>
+        <div class="alert alert-danger wbs-erreurs" role="alert">
+            <div>
+                <strong>Anomalies détectées — corrigez-les avant enregistrement :</strong>
+                <ul>
+                    {% for erreur in erreurs %}
+                    <li>{{ erreur }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
         </div>
         {% endif %}
 
@@ -96,119 +100,139 @@
             <input type="hidden" name="livrables_{{ phase.index }}" value="{{ phase.livrables|join(' ;; ') }}">
             {% endfor %}
 
-            <h2>Proposition éditable</h2>
-            <p class="wbs-meta">
+            <h2 class="section-title">Proposition éditable</h2>
+            <p class="meta wbs-meta">
                 Modifiez les codes, descriptions, durées et prédécesseurs. Les durées
                 proposées sont indicatives et non garanties : elles ne deviennent
                 des données du planning qu'après votre confirmation explicite.
             </p>
 
-            <table class="wbs-table">
-                <thead>
-                    <tr>
-                        <th>Code</th>
-                        <th>Description</th>
-                        <th>Durée (jours)</th>
-                        <th>Prédécesseurs (codes séparés par des virgules)</th>
-                        <th>Type</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for phase in apercu.phases %}
-                    <tr class="wbs-phase">
-                        <th colspan="5">Phase {{ phase.index + 1 }} — {{ phase.nom }}</th>
-                    </tr>
-                    {% if phase.livrables %}
-                    <tr class="wbs-livrables">
-                        <td colspan="5"><strong>Livrables :</strong> {{ phase.livrables|join(' · ') }}</td>
-                    </tr>
-                    {% endif %}
-                    {% for ligne in phase.lignes %}
-                    <tr>
-                        <td>
-                            <input type="hidden" name="phase_{{ ligne.index }}" value="{{ phase.nom }}">
-                            <input type="hidden" name="phase_index_{{ ligne.index }}" value="{{ phase.index }}">
-                            <input type="text" name="code_{{ ligne.index }}" value="{{ ligne.code }}" required>
-                        </td>
-                        <td><input type="text" name="description_{{ ligne.index }}" value="{{ ligne.description }}"></td>
-                        <td><input type="number" min="0" step="1" name="duree_{{ ligne.index }}" value="{{ ligne.duree }}"></td>
-                        <td><input type="text" name="predecesseurs_{{ ligne.index }}" value="{{ ligne.predecesseurs }}"></td>
-                        <td>
-                            {% if ligne.jalon %}<span class="wbs-jalon">🎯 Jalon</span>{% else %}Tâche{% endif %}
-                        </td>
-                    </tr>
-                    {% endfor %}
-                    {% endfor %}
-                </tbody>
-            </table>
+            <div class="table-wrapper">
+                <table class="data-table wbs-table">
+                    <thead>
+                        <tr>
+                            <th>Code</th>
+                            <th>Description</th>
+                            <th>Durée (jours)</th>
+                            <th>Prédécesseurs (codes séparés par des virgules)</th>
+                            <th>Type</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for phase in apercu.phases %}
+                        <tr class="wbs-phase">
+                            <th colspan="5"><span class="badge badge-info">Niveau 1</span> Phase {{ phase.index + 1 }} — {{ phase.nom }}</th>
+                        </tr>
+                        {% if phase.livrables %}
+                        <tr class="wbs-livrables">
+                            <td colspan="5"><strong>Livrables :</strong> {{ phase.livrables|join(' · ') }}</td>
+                        </tr>
+                        {% endif %}
+                        {% for ligne in phase.lignes %}
+                        <tr class="wbs-level-2">
+                            <td>
+                                <span class="badge badge-muted">Niveau 2</span>
+                                <input type="hidden" name="phase_{{ ligne.index }}" value="{{ phase.nom }}">
+                                <input type="hidden" name="phase_index_{{ ligne.index }}" value="{{ phase.index }}">
+                                <input type="text" name="code_{{ ligne.index }}" value="{{ ligne.code }}" required>
+                            </td>
+                            <td><input type="text" name="description_{{ ligne.index }}" value="{{ ligne.description }}"></td>
+                            <td><input type="number" min="0" step="1" name="duree_{{ ligne.index }}" value="{{ ligne.duree }}"></td>
+                            <td><input type="text" name="predecesseurs_{{ ligne.index }}" value="{{ ligne.predecesseurs }}"></td>
+                            <td>
+                                {% if ligne.jalon %}<span class="badge badge-warning wbs-jalon">🎯 Jalon</span>{% else %}<span class="badge badge-muted">Tâche</span>{% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
 
-            <div class="wbs-listes">
-                <div class="wbs-carte">
-                    <h2>Livrables et jalons</h2>
-                    <p><strong>Livrables :</strong></p>
-                    <ul>
-                        {% for livrable in apercu.livrables %}
-                        <li>{{ livrable }}</li>
-                        {% else %}
-                        <li>Aucun livrable proposé.</li>
-                        {% endfor %}
-                    </ul>
-                    <p><strong>Jalons :</strong></p>
-                    <ul>
-                        {% for jalon in apercu.jalons %}
-                        <li>🎯 {{ jalon.code }} — {{ jalon.description }}</li>
-                        {% else %}
-                        <li>Aucun jalon proposé.</li>
-                        {% endfor %}
-                    </ul>
+            <div class="card-grid wbs-listes">
+                <div class="card wbs-carte">
+                    <div class="card-header">
+                        <h2 class="card-title">Livrables et jalons</h2>
+                    </div>
+                    <div class="card-body">
+                        <p><strong>Livrables :</strong></p>
+                        <ul>
+                            {% for livrable in apercu.livrables %}
+                            <li>{{ livrable }}</li>
+                            {% else %}
+                            <li>Aucun livrable proposé.</li>
+                            {% endfor %}
+                        </ul>
+                        <p><strong>Jalons :</strong></p>
+                        <ul>
+                            {% for jalon in apercu.jalons %}
+                            <li>🎯 {{ jalon.code }} — {{ jalon.description }}</li>
+                            {% else %}
+                            <li>Aucun jalon proposé.</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
                 </div>
-                <div class="wbs-carte">
-                    <h2>Hypothèses, limites et avertissements</h2>
-                    <p><strong>Hypothèses :</strong> {{ apercu.hypotheses or 'Aucune hypothèse renseignée.' }}</p>
-                    <p><strong>Limites :</strong> {{ apercu.limites or 'Aucune limite renseignée.' }}</p>
-                    <p><strong>Avertissements :</strong></p>
-                    <ul>
-                        {% for avertissement in apercu.avertissements %}
-                        <li>{{ avertissement }}</li>
-                        {% else %}
-                        <li>Aucun avertissement.</li>
-                        {% endfor %}
-                    </ul>
+                <div class="card wbs-carte">
+                    <div class="card-header">
+                        <h2 class="card-title">Hypothèses, limites et avertissements</h2>
+                    </div>
+                    <div class="card-body">
+                        <p><strong>Hypothèses :</strong> {{ apercu.hypotheses or 'Aucune hypothèse renseignée.' }}</p>
+                        <p><strong>Limites :</strong> {{ apercu.limites or 'Aucune limite renseignée.' }}</p>
+                        <p><strong>Avertissements :</strong></p>
+                        <ul>
+                            {% for avertissement in apercu.avertissements %}
+                            <li>{{ avertissement }}</li>
+                            {% else %}
+                            <li>Aucun avertissement.</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
                 </div>
             </div>
 
-            <label class="wbs-confirmation">
+            <label class="checkbox-field wbs-confirmation">
                 <input type="checkbox" name="confirmer" value="oui">
-                Je confirme explicitement cette proposition et j'autorise la création du projet.
+                <span>Je confirme explicitement cette proposition et j'autorise la création du projet.</span>
             </label>
-            <button class="wbs-btn" type="submit">Enregistrer le projet</button>
+            <div class="actions-bar">
+                <button class="btn btn-primary wbs-btn" type="submit">Enregistrer le projet</button>
+            </div>
         </form>
 
         {% else %}
-        <form class="wbs-form" method="post" action="{{ url_for('ia.nouveau_projet_wbs') }}">
+        <form class="form-card wbs-form" method="post" action="{{ url_for('ia.nouveau_projet_wbs') }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="etape" value="generer">
 
-            <div class="wbs-carte">
-                <h2>Décrivez votre projet</h2>
-                <p class="wbs-meta">
-                    La proposition est générée localement par règles déterministes :
-                    aucune clé API, aucun appel réseau. Elle reste indicative et
-                    modifiable avant enregistrement.
-                </p>
+            <h2 class="section-title">Décrivez votre projet</h2>
+            <p class="field-hint wbs-meta">
+                La proposition est générée localement par règles déterministes :
+                aucune clé API, aucun appel réseau. Elle reste indicative et
+                modifiable avant enregistrement.
+            </p>
 
-                <label for="objectif">Objectif du projet</label>
-                <textarea id="objectif" name="objectif" required
-                          placeholder="Ex. : Créer une application web de réservation">{{ valeurs.objectif }}</textarea>
+            <div class="form-grid">
+                <div class="field">
+                    <label for="objectif">Objectif du projet</label>
+                    <textarea id="objectif" name="objectif" required
+                              placeholder="Ex. : Créer une application web de réservation">{{ valeurs.objectif }}</textarea>
+                </div>
 
-                <label for="contraintes">Contraintes (facultatif)</label>
-                <textarea id="contraintes" name="contraintes"
-                          placeholder="Ex. : budget limité, livraison avant le 31/12">{{ valeurs.contraintes }}</textarea>
+                <div class="field">
+                    <label for="contraintes">Contraintes (facultatif)</label>
+                    <textarea id="contraintes" name="contraintes"
+                              placeholder="Ex. : budget limité, livraison avant le 31/12">{{ valeurs.contraintes }}</textarea>
+                </div>
             </div>
 
-            <button class="wbs-btn" type="submit">Générer la proposition</button>
+            <div class="actions-bar">
+                <button class="btn btn-primary wbs-btn" type="submit">Générer la proposition</button>
+            </div>
         </form>
         {% endif %}
     </main>
+</div>
 </body>
 </html>

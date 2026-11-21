@@ -5,182 +5,217 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Analyse des risques — {{ projet.name }}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    <style>
-        .mp-page { max-width: 1200px; }
-        .mp-nav { justify-content: flex-end; }
-        .mp-aide { font-size: .85rem; color: #6b7280; line-height: 1.55; }
-        .mp-meta { color: #6b7280; font-size: .9rem; }
-        .mp-bandeau { background: #fffbeb; border: 2px solid #f59e0b; border-left: 6px solid #d97706; color: #92400e; padding: 14px 18px; border-radius: 8px; margin: 16px 0 22px; font-weight: 700; }
-        .mp-indicatif { background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; padding: 10px 14px; border-radius: 6px; margin: 12px 0 20px; font-size: .9rem; }
-        .mp-carte { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px 20px; margin: 16px 0; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
-        .mp-carte > h2 { margin: 0 0 10px; font-size: 1.05rem; color: #1e3a8a; }
-        .mp-origine { display: flex; flex-wrap: wrap; gap: 10px; margin: 8px 0 14px; }
-        .mp-badge { display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: .78rem; font-weight: 700; }
-        .mp-badge-regle { background: #dbeafe; color: #1e40af; }
-        .mp-badge-ia { background: #ede9fe; color: #5b21b6; }
-        .mp-origine-texte { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px 12px; margin: 6px 0; font-size: .9rem; line-height: 1.55; }
-        .mp-bloc { margin: 12px 0; }
-        .mp-bloc h3 { margin: 0 0 5px; font-size: .86rem; color: #374151; text-transform: uppercase; letter-spacing: .03em; }
-        .mp-bloc p, .mp-bloc ul { margin: 0; line-height: 1.55; font-size: .92rem; }
-        .mp-bloc ul { padding-left: 20px; }
-        .mp-preuve { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; padding: 10px 12px; }
-        .mp-preuve ul { padding-left: 20px; margin: 0; font-size: .88rem; }
-        .mp-formulaire { margin-top: 16px; padding-top: 14px; border-top: 1px dashed #cbd5e1; }
-        .mp-formulaire label { display: block; font-size: .85rem; font-weight: 600; color: #374151; margin-bottom: 5px; }
-        .mp-formulaire textarea { width: 100%; min-height: 64px; padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 5px; font-family: inherit; font-size: .9rem; }
-        .mp-btn { display: inline-block; background: #2563eb; color: #fff; padding: 8px 14px; border-radius: 6px; font-size: .87rem; font-weight: 600; text-decoration: none; border: 0; cursor: pointer; margin: 8px 8px 0 0; }
-        .mp-btn:hover { background: #1d4ed8; color: #fff; text-decoration: none; }
-        .mp-btn-confirme { background: #15803d; }
-        .mp-btn-rejete { background: #b91c1c; }
-        .mp-btn-neutre { background: #e5e7eb; color: #1f2937; }
-        .mp-btn-neutre:hover { background: #d1d5db; color: #111827; }
-        .mp-vide { background: #f9fafb; padding: 20px; border-radius: 6px; color: #6b7280; }
-        .mp-flash { padding: 10px 14px; border-radius: 6px; margin-bottom: 10px; font-size: .9rem; }
-        .mp-flash-success { background: #dcfce7; color: #166534; }
-        .mp-flash-error { background: #fee2e2; color: #991b1b; }
-        .mp-table { width: 100%; border-collapse: collapse; font-size: .84rem; }
-        .mp-table th, .mp-table td { border: 1px solid #e5e7eb; padding: 6px 9px; text-align: left; }
-        .mp-table th { background: #f3f4f6; }
-    </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='design.css') }}">
 </head>
 <body>
-    <nav class="nav mp-nav">
-        <a href="{{ accueil_url }}">Accueil</a>
-        <a href="{{ mes_projets_url }}">Mes projets</a>
-        <a href="{{ url_for('projects.detail', project_id=projet.id) }}">Détail du projet</a>
-        {% if current_user.is_authenticated %}
-        <a href="{{ deconnexion_url }}">Déconnexion</a>
-        {% endif %}
-    </nav>
+<div class="app-shell">
+    <header class="topbar">
+        <a class="topbar-brand" href="{{ url_for('accueil') }}"><span class="topbar-brand-icon">📊</span> PERT/CPM</a>
+        <ul class="topbar-nav">
+            <li><a href="{{ accueil_url }}">Accueil</a></li>
+            <li><a href="{{ mes_projets_url }}">Mes projets</a></li>
+            <li><a href="{{ url_for('projects.detail', project_id=projet.id) }}">Détail du projet</a></li>
+            {% if current_user.is_authenticated %}
+            <li><a href="{{ deconnexion_url }}">Déconnexion</a></li>
+            {% endif %}
+        </ul>
+    </header>
 
-    <main class="mp-page">
-        <h1>Analyse des risques</h1>
-        <p class="mp-aide">Projet : <strong>{{ projet.name }}</strong></p>
+    <main class="container">
+        <div class="page-header">
+            <div>
+                <h1 class="page-title">Analyse des risques</h1>
+                <p class="page-subtitle mp-aide">Projet : <strong>{{ projet.name }}</strong></p>
+            </div>
+        </div>
 
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
+                <div class="flashes">
                 {% for categorie, message in messages %}
-                <div class="mp-flash mp-flash-{{ categorie }}">{{ message }}</div>
+                    {% set classe_alerte = {'error': 'alert-danger', 'danger': 'alert-danger', 'success': 'alert-success', 'warning': 'alert-warning'}.get(categorie, 'alert-info') %}
+                    <div class="alert {{ classe_alerte }} flash mp-flash mp-flash-{{ categorie }}">{{ message }}</div>
                 {% endfor %}
+                </div>
             {% endif %}
         {% endwith %}
 
-        <div class="mp-indicatif">
-            <strong>Niveau indicatif.</strong> Les alertes sont calculées par des
-            règles déterministes à partir des résultats du moteur PERT/CPM. Elles
-            ne constituent pas une prédiction de date ni une garantie de résultat.
+        <div class="alert alert-info mp-indicatif">
+            <div>
+                <strong>Niveau indicatif.</strong> Les alertes sont calculées par des
+                règles déterministes à partir des résultats du moteur PERT/CPM. Elles
+                ne constituent pas une prédiction de date ni une garantie de résultat.
+            </div>
         </div>
 
-        <div class="mp-bandeau">
+        <div class="alert alert-warning mp-bandeau">
             Durée calculée : {{ duree_totale }} jour{{ '' if duree_totale == 1 else 's' }}
             &nbsp;·&nbsp; {{ alertes|length }} alerte{{ '' if alertes|length == 1 else 's' }}
         </div>
 
         {% if chemins_critiques %}
-        <div class="mp-bloc">
-            <h3>Chemins critiques calculés</h3>
-            <ul>
-                {% for chemin in chemins_critiques %}
-                <li>{{ chemin|join(' → ') }}</li>
-                {% endfor %}
-            </ul>
+        <section class="card">
+            <div class="card-header"><h2 class="card-title">Chemins critiques calculés</h2></div>
+            <div class="card-body">
+                <ul>
+                    {% for chemin in chemins_critiques %}
+                    <li>{{ chemin|join(' → ') }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </section>
+        {% endif %}
+
+        {% if alertes %}
+        <h2 class="section-title">Registre des alertes</h2>
+        <div class="table-wrapper">
+            <table class="data-table mp-table">
+                <thead>
+                    <tr>
+                        <th>Alerte</th>
+                        <th>Tâche</th>
+                        <th>Criticité</th>
+                        <th>Statut</th>
+                        <th>Origine</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for alerte in alertes %}
+                    {% set niveau_alerte = (alerte.niveau or 'indicatif')|lower %}
+                    {% set titre_alerte = (alerte.titre or '')|lower %}
+                    {% set classe_criticite = 'badge-critical' if ('critique' in titre_alerte or niveau_alerte in ['critique', 'critical', 'eleve', 'élevé', 'high']) else ('badge-warning' if ('faible' in titre_alerte or niveau_alerte in ['moyen', 'modere', 'modéré', 'medium', 'warning']) else 'badge-info') %}
+                    {% set classe_statut = 'badge-success' if alerte.statut == 'confirme' else ('badge-critical' if alerte.statut == 'rejete' else 'badge-muted') %}
+                    <tr>
+                        <td><strong>{{ alerte.titre }}</strong></td>
+                        <td>{{ alerte.code_tache or 'projet (global)' }}</td>
+                        <td><span class="badge {{ classe_criticite }}">{{ alerte.niveau or 'indicatif' }}</span></td>
+                        <td><span class="badge {{ classe_statut }}">{{ alerte.statut or 'en_attente' }}</span></td>
+                        <td>
+                            <span class="badge badge-info mp-badge mp-badge-regle">Règle calculée</span>
+                            {% if alerte.origine == 'regle+ia' %}
+                            <span class="badge badge-warning mp-badge mp-badge-ia">Appréciation IA</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
         </div>
+        {% else %}
+        <div class="empty-state">Aucune alerte calculée pour ce planning.</div>
         {% endif %}
 
-        {% if not alertes %}
-        <div class="mp-vide">Aucune alerte calculée pour ce planning.</div>
-        {% endif %}
-
+        <h2 class="section-title">Détail des alertes</h2>
         {% for alerte in alertes %}
             {% set preuve = alerte.preuve|default({}, true) %}
             {% set elements = alerte.elements_justificatifs|default([], true) %}
-            <article class="mp-carte">
-                <h2>{{ alerte.titre }}</h2>
-                <p class="mp-meta">
-                    Tâche : {{ alerte.code_tache or 'projet (global)' }}
-                    &nbsp;·&nbsp; Niveau : {{ alerte.niveau or 'indicatif' }}
-                    &nbsp;·&nbsp; Statut : {{ alerte.statut or 'en_attente' }}
-                </p>
-
-                <div class="mp-origine">
-                    <span class="mp-badge mp-badge-regle">Règle calculée</span>
-                    {% if alerte.origine == 'regle+ia' %}
-                    <span class="mp-badge mp-badge-ia">Appréciation IA</span>
-                    {% endif %}
+            <article class="card card-accent card-accent--warning">
+                <div class="card-header">
+                    <h3 class="card-title">{{ alerte.titre }}</h3>
+                    <span class="badge badge-muted">{{ alerte.statut or 'en_attente' }}</span>
                 </div>
+                <div class="card-body">
+                    <p class="meta mp-meta">
+                        Tâche : {{ alerte.code_tache or 'projet (global)' }}
+                        &nbsp;·&nbsp; Niveau : {{ alerte.niveau or 'indicatif' }}
+                        &nbsp;·&nbsp; Statut : {{ alerte.statut or 'en_attente' }}
+                    </p>
 
-                <div class="mp-origine-texte">
-                    <strong>Règle calculée :</strong> origine « {{ alerte.origine or 'regle' }} ».
-                    La justification, la preuve et la recommandation sont pilotées
-                    par la règle, jamais remplacées par le fournisseur IA.
-                </div>
-                <div class="mp-origine-texte">
-                    <strong>Appréciation IA :</strong>
-                    {% if alerte.appreciation_ia %}
-                        {{ alerte.appreciation_ia }}
-                    {% else %}
-                        aucune appréciation fournie (mode sans IA ou réponse non vérifiée).
-                    {% endif %}
-                </div>
-
-                <div class="mp-bloc">
-                    <h3>Justification</h3>
-                    <p>{{ alerte.justification or '—' }}</p>
-                </div>
-
-                <div class="mp-bloc">
-                    <h3>Preuve (valeurs calculées)</h3>
-                    <div class="mp-preuve">
-                        {% if preuve is mapping %}
-                        <ul>
-                            {% for cle, valeur in preuve.items() %}
-                            <li><strong>{{ cle }}</strong> : {{ valeur if valeur is not none else 'non renseignée' }}</li>
-                            {% endfor %}
-                        </ul>
-                        {% else %}
-                        <p>{{ preuve }}</p>
+                    <div class="actions-bar">
+                        <span class="badge badge-info mp-badge mp-badge-regle">Règle calculée</span>
+                        {% if alerte.origine == 'regle+ia' %}
+                        <span class="badge badge-warning mp-badge mp-badge-ia">Appréciation IA</span>
                         {% endif %}
                     </div>
-                </div>
 
-                <div class="mp-bloc">
-                    <h3>Éléments justificatifs</h3>
-                    {% if elements %}
-                    <ul>
-                        {% for element in elements %}<li>{{ element }}</li>{% endfor %}
-                    </ul>
+                    <div class="alert alert-info">
+                        <div>
+                            <strong>Règle calculée :</strong> origine « {{ alerte.origine or 'regle' }} ».
+                            La justification, la preuve et la recommandation sont pilotées
+                            par la règle, jamais remplacées par le fournisseur IA.
+                        </div>
+                    </div>
+
+                    {% if alerte.appreciation_ia %}
+                    <div class="alert alert-info">
+                        <div>
+                            <strong>Appréciation IA :</strong>
+                            {{ alerte.appreciation_ia }}
+                        </div>
+                    </div>
                     {% else %}
-                    <p class="mp-meta">Aucun élément complémentaire.</p>
+                    <div class="alert alert-warning">
+                        <div>
+                            <strong>Appréciation IA :</strong>
+                            aucune appréciation fournie (mode sans IA ou réponse non vérifiée).
+                        </div>
+                    </div>
                     {% endif %}
-                </div>
 
-                <div class="mp-bloc">
-                    <h3>Recommandation</h3>
-                    <p>{{ alerte.recommandation or '—' }}</p>
-                </div>
+                    <div class="mp-bloc">
+                        <h4>Justification</h4>
+                        <p>{{ alerte.justification or '—' }}</p>
+                    </div>
 
-                {% if alerte.commentaire %}
-                <div class="mp-bloc">
-                    <h3>Commentaire enregistré</h3>
-                    <p>{{ alerte.commentaire }}</p>
-                </div>
-                {% endif %}
+                    <div class="mp-bloc">
+                        <h4>Preuve (valeurs calculées)</h4>
+                        <div class="table-wrapper mp-preuve">
+                            {% if preuve is mapping %}
+                            <ul>
+                                {% for cle, valeur in preuve.items() %}
+                                <li><strong>{{ cle }}</strong> : {{ valeur if valeur is not none else 'non renseignée' }}</li>
+                                {% endfor %}
+                            </ul>
+                            {% else %}
+                            <p>{{ preuve }}</p>
+                            {% endif %}
+                        </div>
+                    </div>
 
-                <form class="mp-formulaire" method="post" action="{{ url_for('ia_gestion.risques', project_id=projet.id) }}">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <input type="hidden" name="alerte_id" value="{{ alerte.id }}">
-                    <label for="commentaire-{{ alerte.id }}">Commentaire sur cette alerte</label>
-                    <textarea id="commentaire-{{ alerte.id }}" name="commentaire" placeholder="Observation, décision, responsable…">{{ alerte.commentaire or '' }}</textarea>
-                    <button class="mp-btn mp-btn-confirme" type="submit" name="statut" value="confirme">Confirmer</button>
-                    <button class="mp-btn mp-btn-rejete" type="submit" name="statut" value="rejete">Rejeter</button>
-                    <button class="mp-btn mp-btn-neutre" type="submit" name="statut" value="en_attente">Enregistrer le commentaire</button>
-                </form>
+                    <div class="mp-bloc">
+                        <h4>Éléments justificatifs</h4>
+                        {% if elements %}
+                        <ul>
+                            {% for element in elements %}<li>{{ element }}</li>{% endfor %}
+                        </ul>
+                        {% else %}
+                        <p class="meta">Aucun élément complémentaire.</p>
+                        {% endif %}
+                    </div>
+
+                    <div class="mp-bloc">
+                        <h4>Recommandation</h4>
+                        <p>{{ alerte.recommandation or '—' }}</p>
+                    </div>
+
+                    {% if alerte.commentaire %}
+                    <div class="mp-bloc">
+                        <h4>Commentaire enregistré</h4>
+                        <p>{{ alerte.commentaire }}</p>
+                    </div>
+                    {% endif %}
+
+                    <form class="form-card mp-formulaire" method="post" action="{{ url_for('ia_gestion.risques', project_id=projet.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="alerte_id" value="{{ alerte.id }}">
+                        <div class="field">
+                            <label for="commentaire-{{ alerte.id }}">Commentaire sur cette alerte</label>
+                            <textarea id="commentaire-{{ alerte.id }}" name="commentaire" placeholder="Observation, décision, responsable…">{{ alerte.commentaire or '' }}</textarea>
+                        </div>
+                        <div class="form-actions actions-bar">
+                            <button class="btn btn-primary mp-btn mp-btn-confirme" type="submit" name="statut" value="confirme">Confirmer</button>
+                            <button class="btn btn-danger mp-btn mp-btn-rejete" type="submit" name="statut" value="rejete">Rejeter</button>
+                            <button class="btn btn-secondary mp-btn mp-btn-neutre" type="submit" name="statut" value="en_attente">Enregistrer le commentaire</button>
+                        </div>
+                    </form>
+                </div>
             </article>
         {% endfor %}
 
-        <p>
-            <a class="mp-btn mp-btn-neutre" href="{{ url_for('projects.detail', project_id=projet.id) }}">Retour au détail du projet</a>
-        </p>
+        <div class="actions-bar">
+            <a class="btn btn-secondary mp-btn mp-btn-neutre" href="{{ url_for('projects.detail', project_id=projet.id) }}">Retour au détail du projet</a>
+        </div>
     </main>
+</div>
 </body>
 </html>

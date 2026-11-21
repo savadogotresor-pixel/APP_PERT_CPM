@@ -5,172 +5,193 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{{ projet.name }} — Tableau de bord PERT/CPM</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    <style>
-        .mp-page { max-width: 1200px; }
-        .mp-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
-        .mp-cartes { display: flex; gap: 14px; flex-wrap: wrap; margin: 20px 0 8px; }
-        .mp-carte { background: #fff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,.08); padding: 14px 18px; min-width: 150px; flex: 1; }
-        .mp-carte span { display: block; font-size: .8rem; color: #6b7280; text-transform: uppercase; letter-spacing: .04em; }
-        .mp-carte strong { display: block; font-size: 1.4rem; color: #1e3a8a; margin-top: 4px; }
-        .mp-btn { display: inline-block; background: #2563eb; color: #fff; padding: 8px 14px; border-radius: 6px; font-size: .9rem; font-weight: 600; text-decoration: none; border: 0; cursor: pointer; margin: 4px 4px 4px 0; }
-        .mp-btn:hover { background: #1d4ed8; color: #fff; text-decoration: none; }
-        .mp-btn-secondary { background: #e5e7eb; color: #1f2937; }
-        .mp-btn-secondary:hover { background: #d1d5db; color: #111827; }
-        .mp-btn-danger { background: #dc2626; }
-        .mp-btn-danger:hover { background: #b91c1c; }
-        .mp-inline { display: inline-flex; align-items: center; gap: 6px; margin: 0; }
-        .mp-confirm { font-size: .8rem; color: #4b5563; }
-        .mp-confirm input { width: 58px; padding: 5px 7px; border: 1px solid #d1d5db; border-radius: 4px; }
-        .mp-table { font-size: .84rem; }
-        .mp-table th, .mp-table td { padding: 7px 9px; }
-        .mp-critique td { background: #fef2f2 !important; }
-        .mp-alerte { background: #fef2f2; border-left: 4px solid #dc2626; color: #991b1b; padding: 12px 16px; border-radius: 6px; margin: 12px 0; }
-        .mp-vide { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
-        .mp-flash { padding: 10px 14px; border-radius: 6px; margin-bottom: 10px; font-size: .9rem; }
-        .mp-flash-success { background: #dcfce7; color: #166534; }
-        .mp-flash-error { background: #fee2e2; color: #991b1b; }
-        .mp-nav { justify-content: flex-end; }
-        .mp-meta { color: #6b7280; font-size: .9rem; }
-    </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='design.css') }}">
 </head>
 <body>
-    <nav class="nav mp-nav">
-        <a href="{{ accueil_url }}">Accueil</a>
-        <a href="{{ url_for('projects.list_projects') }}">Mes projets</a>
-        {% if current_user.is_authenticated %}
-        <a href="{{ deconnexion_url }}">Déconnexion</a>
-        {% endif %}
-    </nav>
+<div class="app-shell">
+    <header class="topbar">
+        <a class="topbar-brand" href="{{ url_for('accueil') }}"><span class="topbar-brand-icon">📊</span> PERT/CPM</a>
+        <ul class="topbar-nav">
+            <li><a href="{{ accueil_url }}">Accueil</a></li>
+            <li><a href="{{ url_for('projects.list_projects') }}">Mes projets</a></li>
+            {% if current_user.is_authenticated %}
+            <li><a href="{{ deconnexion_url }}">Déconnexion</a></li>
+            {% endif %}
+        </ul>
+    </header>
 
-    <main class="mp-page">
-        <div class="mp-head">
+    <main class="container">
+        <div class="page-header">
             <div>
-                <h1>{{ projet.name }}</h1>
-                <p class="mp-meta">
+                <h1 class="page-title">{{ projet.name }}</h1>
+                <p class="page-subtitle">Tableau de bord PERT/CPM</p>
+            </div>
+        </div>
+
+        <div class="actions-bar">
+            <a class="btn btn-secondary btn-sm mp-btn mp-btn-secondary" href="{{ url_for('projects.edit_project', project_id=projet.id) }}">Modifier le projet</a>
+            <a class="btn btn-secondary btn-sm mp-btn mp-btn-secondary" href="{{ url_for('projects.import_fichier', project_id=projet.id) }}">⬆️ Importer un fichier</a>
+            <a class="btn btn-secondary btn-sm mp-btn mp-btn-secondary" href="{{ url_for('projects.optimisation', project_id=projet.id) }}">⚡ Simuler une optimisation</a>
+            <a class="btn btn-secondary btn-sm mp-btn mp-btn-secondary" href="{{ url_for('projects.export_csv', project_id=projet.id) }}">⬇️ CSV</a>
+            <a class="btn btn-secondary btn-sm mp-btn mp-btn-secondary" href="{{ url_for('projects.export_xlsx', project_id=projet.id) }}">⬇️ Excel</a>
+            <a class="btn btn-secondary btn-sm mp-btn mp-btn-secondary" href="{{ url_for('projects.rapport_pdf', project_id=projet.id) }}">📄 Rapport PDF (serveur)</a>
+            <a class="btn btn-secondary btn-sm mp-btn mp-btn-secondary" href="{{ url_for('ia.assistant', project_id=projet.id) }}">🤖 Assistant IA</a>
+            <a class="btn btn-secondary btn-sm mp-btn mp-btn-secondary" href="{{ url_for('ia.nouveau_projet_wbs') }}">🧱 Générer un projet avec l'IA</a>
+            {% set assistance_href = url_optimisation_assistee(projet.id) if url_optimisation_assistee is defined else url_for('projects.optimisation', project_id=projet.id) %}
+            <a class="btn btn-secondary btn-sm mp-btn mp-btn-secondary" href="{{ assistance_href }}">⚡ Optimisation assistée (IA)</a>
+            <a class="btn btn-secondary btn-sm mp-btn mp-btn-secondary" href="{{ url_for('ia_gestion.risques', project_id=projet.id) }}">🛡️ Analyse des risques (IA)</a>
+            <a class="btn btn-secondary btn-sm mp-btn mp-btn-secondary" href="{{ url_for('ia_gestion.action_assistee', project_id=projet.id) }}">🗣️ Action en langage naturel (IA)</a>
+            <a class="btn btn-secondary btn-sm mp-btn mp-btn-secondary" href="{{ url_for('ia_gestion.rapport_intelligent', project_id=projet.id) }}">🧠 Rapport intelligent</a>
+            <a class="btn btn-primary btn-sm mp-btn" href="{{ url_for('projects.new_task', project_id=projet.id) }}">➕ Nouvelle tâche</a>
+        </div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+            <div class="flashes">
+                {% for categorie, message in messages %}
+                {% set alert_class = 'alert-success' if categorie == 'success' else ('alert-danger' if categorie == 'error' or categorie == 'danger' else ('alert-warning' if categorie == 'warning' else 'alert-info')) %}
+                <div class="alert {{ alert_class }} flash mp-flash mp-flash-{{ categorie }}">{{ message }}</div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        {% endwith %}
+
+        <section class="card">
+            <div class="card-header">
+                <h2 class="card-title">Informations du projet</h2>
+                <span class="badge {{ 'badge-muted' if projet.status == 'archive' else 'badge-success' }}">
+                    {{ 'Archivé' if projet.status == 'archive' else 'Actif' }}
+                </span>
+            </div>
+            <div class="card-body">
+                <p class="meta mp-meta">
                     {% if projet.description %}{{ projet.description }}<br>{% endif %}
                     Date de référence : {{ projet.date_reference or 'non renseignée' }}
                     &nbsp;·&nbsp; Statut : {{ 'Archivé' if projet.status == 'archive' else 'Actif' }}
                 </p>
             </div>
-            <div>
-                <a class="mp-btn mp-btn-secondary" href="{{ url_for('projects.edit_project', project_id=projet.id) }}">Modifier le projet</a>
-                <a class="mp-btn mp-btn-secondary" href="{{ url_for('projects.import_fichier', project_id=projet.id) }}">⬆️ Importer un fichier</a>
-                <a class="mp-btn mp-btn-secondary" href="{{ url_for('projects.optimisation', project_id=projet.id) }}">⚡ Simuler une optimisation</a>
-                <a class="mp-btn mp-btn-secondary" href="{{ url_for('projects.export_csv', project_id=projet.id) }}">⬇️ CSV</a>
-                <a class="mp-btn mp-btn-secondary" href="{{ url_for('projects.export_xlsx', project_id=projet.id) }}">⬇️ Excel</a>
-                <a class="mp-btn mp-btn-secondary" href="{{ url_for('projects.rapport_pdf', project_id=projet.id) }}">📄 Rapport PDF (serveur)</a>
-                <a class="mp-btn mp-btn-secondary" href="{{ url_for('ia.assistant', project_id=projet.id) }}">🤖 Assistant IA</a>
-                <a class="mp-btn mp-btn-secondary" href="{{ url_for('ia.nouveau_projet_wbs') }}">🧱 Générer un projet avec l'IA</a>
-                {% set assistance_href = url_optimisation_assistee(projet.id) if url_optimisation_assistee is defined else url_for('projects.optimisation', project_id=projet.id) %}
-                <a class="mp-btn mp-btn-secondary" href="{{ assistance_href }}">⚡ Optimisation assistée (IA)</a>
-                <a class="mp-btn mp-btn-secondary" href="{{ url_for('ia_gestion.risques', project_id=projet.id) }}">🛡️ Analyse des risques (IA)</a>
-                <a class="mp-btn mp-btn-secondary" href="{{ url_for('ia_gestion.action_assistee', project_id=projet.id) }}">🗣️ Action en langage naturel (IA)</a>
-                <a class="mp-btn mp-btn-secondary" href="{{ url_for('ia_gestion.rapport_intelligent', project_id=projet.id) }}">🧠 Rapport intelligent</a>
-                <a class="mp-btn" href="{{ url_for('projects.new_task', project_id=projet.id) }}">➕ Nouvelle tâche</a>
+        </section>
+
+        <h2 class="section-title">Synthèse</h2>
+        <div class="stat-grid">
+            <div class="stat-card stat-card--primary mp-carte">
+                <span class="stat-label">Tâches</span>
+                <strong class="stat-value">{{ taches_triees|length }}</strong>
+                <span class="stat-icon" aria-hidden="true">📋</span>
+            </div>
+            <div class="stat-card stat-card--success mp-carte">
+                <span class="stat-label">Durée totale</span>
+                <strong class="stat-value">{{ duree_totale if duree_totale is not none else '—' }}</strong>
+                <span class="stat-icon" aria-hidden="true">⏱️</span>
+            </div>
+            <div class="stat-card stat-card--danger mp-carte">
+                <span class="stat-label">Tâches critiques</span>
+                <strong class="stat-value">{{ nb_critiques }}</strong>
+                <span class="stat-icon" aria-hidden="true">🎯</span>
+            </div>
+            <div class="stat-card stat-card--warning mp-carte">
+                <span class="stat-label">Fin estimée</span>
+                <strong class="stat-value">{{ date_fin_estimee or '—' }}</strong>
+                <span class="stat-icon" aria-hidden="true">📅</span>
             </div>
         </div>
 
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for categorie, message in messages %}
-                <div class="mp-flash mp-flash-{{ categorie }}">{{ message }}</div>
-                {% endfor %}
-            {% endif %}
-        {% endwith %}
-
-        <h2>Synthèse</h2>
-        <div class="mp-cartes">
-            <div class="mp-carte"><span>Tâches</span><strong>{{ taches_triees|length }}</strong></div>
-            <div class="mp-carte"><span>Durée totale</span><strong>{{ duree_totale if duree_totale is not none else '—' }}</strong></div>
-            <div class="mp-carte"><span>Tâches critiques</span><strong>{{ nb_critiques }}</strong></div>
-            <div class="mp-carte"><span>Fin estimée</span><strong>{{ date_fin_estimee or '—' }}</strong></div>
-        </div>
-
         {% if erreur_calcul %}
-        <div class="mp-alerte">
-            <strong>Planning non calculable :</strong> {{ erreur_calcul }}
+        <div class="alert alert-danger mp-alerte">
+            <div><strong>Planning non calculable :</strong> {{ erreur_calcul }}</div>
         </div>
         {% endif %}
 
-        <h2>Chemins critiques</h2>
-        {% if chemins_critiques %}
-            <ul>
-                {% for chemin in chemins_critiques %}
-                <li>{{ chemin|join(' → ') }}</li>
-                {% endfor %}
-            </ul>
-        {% else %}
-            <p class="mp-meta">Aucun chemin critique à afficher.</p>
-        {% endif %}
+        <h2 class="section-title">Chemins critiques</h2>
+        <section class="card">
+            <div class="card-body">
+                {% if chemins_critiques %}
+                    <ul>
+                        {% for chemin in chemins_critiques %}
+                        <li>{{ chemin|join(' → ') }}</li>
+                        {% endfor %}
+                    </ul>
+                {% else %}
+                    <p class="meta mp-meta">Aucun chemin critique à afficher.</p>
+                {% endif %}
+            </div>
+        </section>
 
-        <h2>Résultats du calcul</h2>
+        <h2 class="section-title">Résultats du calcul</h2>
         {% if resultats %}
-        <table class="mp-table">
-            <thead>
-                <tr>
-                    <th>Tâche</th><th>Description</th><th>Durée</th>
-                    <th>ES</th><th>EF</th><th>LS</th><th>LF</th>
-                    <th>Marge totale</th><th>Marge libre</th><th>Critique</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for code, r in resultats.items() %}
-                <tr {% if r.critique %}class="mp-critique"{% endif %}>
-                    <td><strong>{{ code }}</strong></td>
-                    <td>{{ taches.get(code, {}).get('description', '') }}</td>
-                    <td>{{ taches.get(code, {}).get('duree', 0) }} j</td>
-                    <td>{{ r.ES }}</td>
-                    <td>{{ r.EF }}</td>
-                    <td>{{ r.LS }}</td>
-                    <td>{{ r.LF }}</td>
-                    <td>{{ r.get('marge_totale', r.get('marge', 0)) }}</td>
-                    <td>{{ r.marge_libre }}</td>
-                    <td>{{ 'OUI' if r.critique else 'Non' }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+        <div class="table-wrapper">
+            <table class="data-table mp-table">
+                <thead>
+                    <tr>
+                        <th>Tâche</th><th>Description</th><th>Durée</th>
+                        <th>ES</th><th>EF</th><th>LS</th><th>LF</th>
+                        <th>Marge totale</th><th>Marge libre</th><th>Critique</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for code, r in resultats.items() %}
+                    <tr {% if r.critique %}class="row-critical mp-critique"{% endif %}>
+                        <td><strong>{{ code }}</strong></td>
+                        <td>{{ taches.get(code, {}).get('description', '') }}</td>
+                        <td>{{ taches.get(code, {}).get('duree', 0) }} j</td>
+                        <td>{{ r.ES }}</td>
+                        <td>{{ r.EF }}</td>
+                        <td>{{ r.LS }}</td>
+                        <td>{{ r.LF }}</td>
+                        <td>{{ r.get('marge_totale', r.get('marge', 0)) }}</td>
+                        <td>{{ r.marge_libre }}</td>
+                        <td>{{ 'OUI' if r.critique else 'Non' }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
         {% else %}
-        <div class="mp-vide">Ajoutez des tâches pour obtenir les résultats PERT/CPM.</div>
+        <div class="empty-state">Ajoutez des tâches pour obtenir les résultats PERT/CPM.</div>
         {% endif %}
 
-        <h2>Liste des tâches</h2>
+        <h2 class="section-title">Liste des tâches</h2>
         {% if taches_triees %}
-        <table class="mp-table">
-            <thead>
-                <tr>
-                    <th>Code</th><th>Description</th><th>Durée</th>
-                    <th>Dépendances</th><th>Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for tache in taches_triees %}
-                {% set infos = taches.get(tache.code, {}) %}
-                <tr>
-                    <td><strong>{{ tache.code }}</strong></td>
-                    <td>{{ tache.description or '—' }}</td>
-                    <td>{{ tache.duree }} j</td>
-                    <td>{{ infos.get('depend_de', [])|join(', ') or '—' }}</td>
-                    <td>
-                        <a class="mp-btn mp-btn-secondary" href="{{ url_for('projects.edit_task', project_id=projet.id, task_id=tache.id) }}">Modifier</a>
-                        <form class="mp-inline" method="post" action="{{ url_for('projects.delete_task', project_id=projet.id, task_id=tache.id) }}" onsubmit="return confirm('Supprimer cette tâche ?');">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <label class="mp-confirm">oui
-                                <input type="text" name="confirm" placeholder="oui" title="Saisissez oui pour confirmer">
-                            </label>
-                            <button class="mp-btn mp-btn-danger" type="submit">Supprimer</button>
-                        </form>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+        <div class="table-wrapper">
+            <table class="data-table mp-table">
+                <thead>
+                    <tr>
+                        <th>Code</th><th>Description</th><th>Durée</th>
+                        <th>Dépendances</th><th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for tache in taches_triees %}
+                    {% set infos = taches.get(tache.code, {}) %}
+                    <tr>
+                        <td><strong>{{ tache.code }}</strong></td>
+                        <td>{{ tache.description or '—' }}</td>
+                        <td>{{ tache.duree }} j</td>
+                        <td>{{ infos.get('depend_de', [])|join(', ') or '—' }}</td>
+                        <td>
+                            <div class="actions-bar mb-0">
+                                <a class="btn btn-secondary btn-sm mp-btn mp-btn-secondary" href="{{ url_for('projects.edit_task', project_id=projet.id, task_id=tache.id) }}">Modifier</a>
+                                <form class="mp-inline d-flex align-center gap-2" method="post" action="{{ url_for('projects.delete_task', project_id=projet.id, task_id=tache.id) }}" onsubmit="return confirm('Supprimer cette tâche ?');">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <label class="mp-confirm">oui
+                                        <input type="text" name="confirm" placeholder="oui" title="Saisissez oui pour confirmer">
+                                    </label>
+                                    <button class="btn btn-danger btn-sm mp-btn mp-btn-danger" type="submit">Supprimer</button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
         {% else %}
-        <div class="mp-vide">
+        <div class="empty-state">
             <p>Aucune tâche enregistrée.</p>
-            <a class="mp-btn" href="{{ url_for('projects.new_task', project_id=projet.id) }}">➕ Nouvelle tâche</a>
+            <a class="btn btn-primary" href="{{ url_for('projects.new_task', project_id=projet.id) }}">➕ Nouvelle tâche</a>
         </div>
         {% endif %}
     </main>
+</div>
 </body>
 </html>

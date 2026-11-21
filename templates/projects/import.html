@@ -5,121 +5,112 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Importer un fichier — {{ projet.name }}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    <style>
-        .mp-page { max-width: 960px; }
-        .mp-form { background: #fff; padding: 24px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
-        .mp-champ { margin-bottom: 18px; }
-        .mp-champ label { display: block; font-weight: 600; margin-bottom: 6px; color: #374151; }
-        .mp-champ input[type="file"] { width: 100%; padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 6px; font: inherit; font-size: .95rem; background: #fff; }
-        .mp-check { display: flex !important; align-items: flex-start; gap: 8px; font-weight: 500 !important; }
-        .mp-check input { margin-top: 3px; }
-        .mp-aide { font-size: .82rem; color: #6b7280; margin-top: 5px; line-height: 1.5; }
-        .mp-code { background: #e5e7eb; padding: 1px 6px; border-radius: 4px; font-family: monospace; }
-        .mp-btn { display: inline-block; background: #2563eb; color: #fff; padding: 10px 18px; border-radius: 6px; font-size: .9rem; font-weight: 600; text-decoration: none; border: 0; cursor: pointer; margin: 8px 8px 0 0; }
-        .mp-btn:hover { background: #1d4ed8; color: #fff; text-decoration: none; }
-        .mp-btn:disabled { background: #9ca3af; cursor: not-allowed; }
-        .mp-btn-secondary { background: #e5e7eb; color: #1f2937; }
-        .mp-btn-secondary:hover { background: #d1d5db; color: #111827; }
-        .mp-table { width: 100%; border-collapse: collapse; font-size: .84rem; margin-top: 10px; }
-        .mp-table th, .mp-table td { border: 1px solid #e5e7eb; padding: 7px 9px; text-align: left; }
-        .mp-table th { background: #f3f4f6; color: #374151; }
-        .mp-alerte { background: #fef2f2; border-left: 4px solid #dc2626; color: #991b1b; padding: 12px 16px; border-radius: 6px; margin: 12px 0; }
-        .mp-alerte ul { margin: 8px 0 0; padding-left: 20px; }
-        .mp-vide { background: #f9fafb; padding: 20px; border-radius: 6px; color: #6b7280; }
-        .mp-flash { padding: 10px 14px; border-radius: 6px; margin-bottom: 10px; font-size: .9rem; }
-        .mp-flash-success { background: #dcfce7; color: #166534; }
-        .mp-flash-error { background: #fee2e2; color: #991b1b; }
-        .mp-nav { justify-content: flex-end; }
-    </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='design.css') }}">
 </head>
 <body>
-    <nav class="nav mp-nav">
-        <a href="{{ accueil_url }}">Accueil</a>
-        <a href="{{ url_for('projects.list_projects') }}">Mes projets</a>
-        <a href="{{ url_for('projects.detail', project_id=projet.id) }}">{{ projet.name }}</a>
-        {% if current_user.is_authenticated %}
-        <a href="{{ deconnexion_url }}">Déconnexion</a>
-        {% endif %}
-    </nav>
+<div class="app-shell">
+    <header class="topbar">
+        <a class="topbar-brand" href="{{ url_for('accueil') }}"><span class="topbar-brand-icon">📊</span> PERT/CPM</a>
+        <ul class="topbar-nav">
+            <li><a href="{{ accueil_url }}">Accueil</a></li>
+            <li><a href="{{ url_for('projects.list_projects') }}">Mes projets</a></li>
+            <li><a href="{{ url_for('projects.detail', project_id=projet.id) }}">{{ projet.name }}</a></li>
+            {% if current_user.is_authenticated %}
+            <li><a href="{{ deconnexion_url }}">Déconnexion</a></li>
+            {% endif %}
+        </ul>
+    </header>
 
-    <main class="mp-page">
-        <h1>Importer un fichier</h1>
-        <p class="mp-aide">Projet : <strong>{{ projet.name }}</strong></p>
+    <main class="container">
+        <div class="page-header">
+            <div>
+                <h1 class="page-title">Importer un fichier</h1>
+                <p class="page-subtitle">Projet : <strong>{{ projet.name }}</strong></p>
+            </div>
+        </div>
 
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
+            <div class="flashes">
                 {% for categorie, message in messages %}
-                <div class="mp-flash mp-flash-{{ categorie }}">{{ message }}</div>
+                {% set alert_class = 'alert-success' if categorie == 'success' else ('alert-danger' if categorie == 'error' or categorie == 'danger' else ('alert-warning' if categorie == 'warning' else 'alert-info')) %}
+                <div class="alert {{ alert_class }} flash mp-flash mp-flash-{{ categorie }}">{{ message }}</div>
                 {% endfor %}
+            </div>
             {% endif %}
         {% endwith %}
 
         {% if erreurs %}
-        <div class="mp-alerte">
-            <strong>Import interrompu :</strong>
-            <ul>
-                {% for erreur in erreurs %}
-                <li>{{ erreur }}</li>
-                {% endfor %}
-            </ul>
+        <div class="alert alert-danger mp-alerte">
+            <div>
+                <strong>Import interrompu :</strong>
+                <ul>
+                    {% for erreur in erreurs %}
+                    <li>{{ erreur }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
         </div>
         {% endif %}
 
-        <form class="mp-form" method="post" enctype="multipart/form-data"
+        <form class="form-card" method="post" enctype="multipart/form-data"
               action="{{ url_for('projects.import_fichier', project_id=projet.id) }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
-            <div class="mp-champ">
+            <div class="field">
                 <label for="fichier">Fichier à importer *</label>
                 <input id="fichier" name="fichier" type="file" required
                        accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
-                <p class="mp-aide">
+                <p class="field-hint mp-aide">
                     Formats acceptés : CSV et Excel (.xlsx). Les tâches importées sont ajoutées
                     au projet sans écraser les tâches existantes.
-                    {% if nom_fichier %}Dernier fichier analysé : <span class="mp-code">{{ nom_fichier }}</span>.{% endif %}
+                    {% if nom_fichier %}Dernier fichier analysé : <span class="chip mp-code">{{ nom_fichier }}</span>.{% endif %}
                 </p>
             </div>
 
             {% if apercu is not none %}
-            <h2>Aperçu des tâches importées</h2>
+            <h2 class="section-title">Aperçu des tâches importées</h2>
             {% if apercu %}
-            <table class="mp-table">
-                <thead>
-                    <tr>
-                        <th>Code</th><th>Description</th><th>Durée</th><th>Prédécesseurs</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for ligne in apercu %}
-                    <tr>
-                        <td><strong>{{ ligne.code }}</strong></td>
-                        <td>{{ ligne.description or '—' }}</td>
-                        <td>{{ ligne.duree }} j</td>
-                        <td>{{ ligne.predecesseurs or '—' }}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-            {% else %}
-            <div class="mp-vide">Aucune tâche lisible dans ce fichier.</div>
-            {% endif %}
-            {% endif %}
-
-            <div class="mp-champ" style="margin-top: 18px;">
-                <label class="mp-check" for="confirmer">
-                    <input id="confirmer" name="confirmer" type="checkbox" value="oui">
-                    <span>Je confirme l'import des tâches affichées ci-dessus.</span>
-                </label>
-                <p class="mp-aide">
-                    Sans cette confirmation, le fichier est seulement analysé et un aperçu est affiché.
-                    Vérifiez l'aperçu, cochez la case, puis cliquez de nouveau sur « Importer ».
-                </p>
+            <div class="table-wrapper">
+                <table class="data-table mp-table">
+                    <thead>
+                        <tr>
+                            <th>Code</th><th>Description</th><th>Durée</th><th>Prédécesseurs</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for ligne in apercu %}
+                        <tr>
+                            <td><strong>{{ ligne.code }}</strong></td>
+                            <td>{{ ligne.description or '—' }}</td>
+                            <td>{{ ligne.duree }} j</td>
+                            <td>{{ ligne.predecesseurs or '—' }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
             </div>
+            {% else %}
+            <div class="empty-state">Aucune tâche lisible dans ce fichier.</div>
+            {% endif %}
+            {% endif %}
 
-            <button class="mp-btn" type="submit"
-                    {% if erreurs %}disabled title="Corrigez les erreurs avant d'importer"{% endif %}>Importer</button>
-            <a class="mp-btn mp-btn-secondary" href="{{ url_for('projects.detail', project_id=projet.id) }}">Annuler</a>
+            <div class="field checkbox-field mp-check" style="margin-top: 18px;">
+                <input id="confirmer" name="confirmer" type="checkbox" value="oui">
+                <label for="confirmer">Je confirme l'import des tâches affichées ci-dessus.</label>
+            </div>
+            <p class="field-hint mp-aide">
+                Sans cette confirmation, le fichier est seulement analysé et un aperçu est affiché.
+                Vérifiez l'aperçu, cochez la case, puis cliquez de nouveau sur « Importer ».
+            </p>
+
+            <div class="form-actions">
+                <a class="btn btn-secondary mp-btn mp-btn-secondary" href="{{ url_for('projects.detail', project_id=projet.id) }}">Annuler</a>
+                <button class="btn btn-primary mp-btn" type="submit"
+                        {% if erreurs %}disabled title="Corrigez les erreurs avant d'importer"{% endif %}>Importer</button>
+            </div>
         </form>
     </main>
+</div>
 </body>
 </html>

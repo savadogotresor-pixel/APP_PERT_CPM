@@ -6,94 +6,80 @@
     <title>Journal d'audit — PERT/CPM</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <style>
-        .admin-page { max-width: 100%; }
-        .admin-subnav { display: flex; gap: 14px; flex-wrap: wrap; margin: 0 0 20px; font-size: .9rem; }
-        .admin-subnav a {
-            background: #e5e7eb; color: #1f2937; padding: 6px 12px;
-            border-radius: 999px; font-weight: 600;
-        }
-        .admin-subnav a:hover { background: #d1d5db; text-decoration: none; }
-        .admin-filtre {
-            background: #fff; border: 1px solid #e5e7eb; border-radius: 10px;
-            padding: 14px 16px; margin: 16px 0 22px; box-shadow: 0 1px 3px rgba(0,0,0,.08);
-        }
-        .admin-filtre label { display: block; font-weight: 600; font-size: .85rem; margin-bottom: 6px; }
-        .admin-filtre select {
-            padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 6px;
-            font-size: .9rem; max-width: 100%;
-        }
-        .admin-btn {
-            display: inline-block; background: #2563eb; color: #fff !important;
-            padding: 8px 14px; border: 0; border-radius: 6px;
-            font-size: .85rem; font-weight: 600; cursor: pointer; text-decoration: none;
-        }
-        .admin-btn:hover { background: #1d4ed8; text-decoration: none; }
-        .admin-table-wrapper { overflow-x: auto; }
-        .admin-table { min-width: 680px; }
-        .admin-table td { vertical-align: top; }
-        .admin-table .admin-date { white-space: nowrap; color: #4b5563; font-size: .85rem; }
+        /* Spécifique à cette page : les libellés d'action peuvent être longs. */
         .admin-table code { word-break: break-all; white-space: pre-wrap; }
-        .admin-vide {
-            background: #fff; padding: 24px; border-radius: 8px;
-            box-shadow: 0 1px 3px rgba(0,0,0,.08);
-        }
-        .admin-flash {
-            padding: 10px 14px; border-radius: 6px; margin-bottom: 10px; font-size: .9rem;
-        }
-        .admin-flash-success { background: #d1fae5; color: #065f46; }
-        .admin-flash-error { background: #fee2e2; color: #991b1b; }
-        .admin-flash-info { background: #dbeafe; color: #1e40af; }
-        .admin-flash-warning { background: #fef3c7; color: #92400e; }
-        .admin-muted { color: #6b7280; font-size: .85rem; }
     </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='design.css') }}">
 </head>
 <body>
-    <nav class="nav admin-page">
-        <a href="{{ url_for('accueil') }}">Accueil</a>
-        <a href="{{ url_for('projects.list_projects') }}">Mes projets</a>
-        <a href="{{ url_for('admin.index') }}">🛠️ Administration</a>
-        <a href="{{ url_for('auth.logout') }}">Déconnexion</a>
-    </nav>
+<div class="app-shell">
+    <header class="topbar">
+        <a class="topbar-brand" href="{{ url_for('accueil') }}"><span class="topbar-brand-icon">📊</span> PERT/CPM</a>
+        <ul class="topbar-nav">
+            <li><a href="{{ url_for('accueil') }}">Accueil</a></li>
+            <li><a href="{{ url_for('projects.list_projects') }}">Mes projets</a></li>
+            <li><a href="{{ url_for('admin.index') }}">🛠️ Administration</a></li>
+            <li><a href="{{ url_for('auth.logout') }}">Déconnexion</a></li>
+        </ul>
+    </header>
 
-    <main class="admin-page">
+    <main class="container admin-page">
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
-                {% for categorie, message in messages %}
-                <div class="admin-flash admin-flash-{{ categorie }}">{{ message }}</div>
-                {% endfor %}
+                <div class="flashes">
+                    {% for categorie, message in messages %}
+                        {% set classe_alerte = {'error': 'alert-danger', 'success': 'alert-success', 'warning': 'alert-warning'}.get(categorie, 'alert-info') %}
+                        <div class="admin-flash admin-flash-{{ categorie }} flash flash-{{ categorie }} alert {{ classe_alerte }}">{{ message }}</div>
+                    {% endfor %}
+                </div>
             {% endif %}
         {% endwith %}
 
-        <h1>📜 Journal d'audit</h1>
-        <p class="admin-muted">
-            {{ journaux|length }} entrée(s) affichée(s) sur {{ limite }} maximum.
-        </p>
-
-        <div class="admin-subnav">
-            <a href="{{ url_for('admin.index') }}">← Tableau de bord</a>
-            <a href="{{ url_for('admin.users') }}">👥 Gérer les comptes</a>
+        <div class="page-header">
+            <div>
+                <h1 class="page-title">📜 Journal d'audit</h1>
+                <p class="page-subtitle admin-muted">
+                    {{ journaux|length }} entrée(s) affichée(s) sur {{ limite }} maximum.
+                </p>
+            </div>
         </div>
 
-        <form class="admin-filtre" method="get" action="{{ url_for('admin.journal') }}">
-            <label for="action">Filtrer par action</label>
-            <select id="action" name="action">
-                <option value="">Toutes les actions</option>
-                {% for action_connue in actions %}
-                <option value="{{ action_connue }}" {% if action == action_connue %}selected{% endif %}>
-                    {{ action_connue }}
-                </option>
-                {% endfor %}
-                {% if action and action not in actions %}
-                <option value="{{ action }}" selected>{{ action }} (personnalisé)</option>
+        <div class="actions-bar admin-subnav">
+            <a class="btn btn-sm btn-secondary" href="{{ url_for('admin.index') }}">← Tableau de bord</a>
+            <a class="btn btn-sm btn-secondary" href="{{ url_for('admin.users') }}">👥 Gérer les comptes</a>
+        </div>
+
+        <form class="form-card admin-filtre" method="get" action="{{ url_for('admin.journal') }}">
+            <div class="form-grid">
+                <div class="field">
+                    <label for="action">Filtrer par action</label>
+                    <select id="action" name="action">
+                        <option value="">Toutes les actions</option>
+                        {% for action_connue in actions %}
+                        <option value="{{ action_connue }}" {% if action == action_connue %}selected{% endif %}>
+                            {{ action_connue }}
+                        </option>
+                        {% endfor %}
+                        {% if action and action not in actions %}
+                        <option value="{{ action }}" selected>{{ action }} (personnalisé)</option>
+                        {% endif %}
+                    </select>
+                </div>
+            </div>
+            {% for cle, valeur in request.args.items() %}
+                {% if cle != 'action' %}
+                <input type="hidden" name="{{ cle }}" value="{{ valeur }}">
                 {% endif %}
-            </select>
-            <button class="admin-btn" type="submit">Filtrer</button>
-            {% if action %}<a class="admin-muted" href="{{ url_for('admin.journal') }}">Réinitialiser</a>{% endif %}
+            {% endfor %}
+            <div class="form-actions">
+                <button class="admin-btn btn btn-primary" type="submit">Filtrer</button>
+                {% if action %}<a class="admin-muted btn btn-sm btn-ghost" href="{{ url_for('admin.journal') }}">Réinitialiser</a>{% endif %}
+            </div>
         </form>
 
         {% if journaux %}
-        <div class="admin-table-wrapper">
-            <table class="admin-table">
+        <div class="table-wrapper admin-table-wrapper">
+            <table class="log-table admin-table">
                 <thead>
                     <tr>
                         <th>Date</th>
@@ -105,9 +91,9 @@
                 <tbody>
                     {% for entree in journaux %}
                     <tr>
-                        <td class="admin-date">{{ entree.created_at.strftime('%d/%m/%Y %H:%M') if entree.created_at else '—' }}</td>
+                        <td class="timestamp admin-date">{{ entree.created_at.strftime('%d/%m/%Y %H:%M') if entree.created_at else '—' }}</td>
                         <td>{{ entree.user.username if entree.user else 'Système' }}</td>
-                        <td><code>{{ entree.action or '—' }}</code></td>
+                        <td><span class="badge badge-info"><code>{{ entree.action or '—' }}</code></span></td>
                         <td>{{ entree.details or '—' }}</td>
                     </tr>
                     {% endfor %}
@@ -115,10 +101,11 @@
             </table>
         </div>
         {% else %}
-        <div class="admin-vide">
+        <div class="empty-state admin-vide">
             <p>Aucune entrée ne correspond à ce filtre.</p>
         </div>
         {% endif %}
     </main>
+</div>
 </body>
 </html>

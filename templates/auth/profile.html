@@ -6,94 +6,87 @@
     <title>Mon profil — PERT/CPM</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <style>
+        /* Spécifique à la page : la carte d'authentification reste compacte. */
         .auth-wrapper { max-width: 560px; margin: 0 auto; }
-        .auth-card {
-            background: #fff; border: 1px solid #e5e7eb; border-radius: 10px;
-            padding: 24px; box-shadow: 0 1px 3px rgba(0, 0, 0, .08);
-        }
-        .auth-card h1 { margin-top: 0; font-size: 1.5rem; }
-        .auth-card h2 { font-size: 1.1rem; margin-top: 28px; }
-        .champ { margin-bottom: 14px; }
-        .champ label { display: block; font-weight: 600; font-size: .9rem; margin-bottom: 4px; }
-        .champ input[type="text"], .champ input[type="email"], .champ input[type="password"] {
-            width: 100%; padding: 10px 12px; border: 1px solid #d1d5db;
-            border-radius: 6px; font-size: .95rem; box-sizing: border-box;
-        }
-        .champ input:focus { outline: 2px solid #2563eb; outline-offset: 1px; }
-        .btn-auth {
-            display: inline-block; background: #2563eb; color: #fff !important;
-            padding: 10px 18px; border: none; border-radius: 6px;
-            font-size: .95rem; font-weight: 600; cursor: pointer; text-decoration: none;
-        }
-        .btn-auth:hover { background: #1d4ed8; text-decoration: none; }
-        .flash {
-            padding: 10px 14px; border-radius: 6px; margin-bottom: 10px;
-            font-size: .9rem; list-style: none;
-        }
-        .flash-success { background: #d1fae5; color: #065f46; }
-        .flash-error { background: #fee2e2; color: #991b1b; }
-        .flash-info { background: #dbeafe; color: #1e40af; }
-        .astuce { font-size: .8rem; color: #6b7280; margin: 4px 0 0; }
     </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='design.css') }}">
 </head>
 <body>
-    <nav class="nav">
-        <a href="/">Accueil</a>
-        <a href="{{ projects_url|default('/projets', true) }}">Mes projets</a>
-        <a href="{{ url_for('auth.profile') }}">Profil</a>
-        <a href="{{ url_for('auth.logout') }}">Déconnexion</a>
-    </nav>
+<div class="app-shell">
+    <header class="topbar">
+        <a class="topbar-brand" href="{{ url_for('accueil') }}"><span class="topbar-brand-icon">📊</span> PERT/CPM</a>
+        <ul class="topbar-nav">
+            <li><a href="{{ url_for('accueil') }}">Accueil</a></li>
+            <li><a href="{{ projects_url|default('/projets', true) }}">Mes projets</a></li>
+            <li><a href="{{ url_for('auth.profile') }}">Profil</a></li>
+            <li><a href="{{ url_for('auth.logout') }}">Déconnexion</a></li>
+        </ul>
+    </header>
 
-    {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-            <div class="flashes">
-                {% for categorie, message in messages %}
-                    <div class="flash flash-{{ categorie }}">{{ message }}</div>
-                {% endfor %}
+    <main class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="flashes">
+                    {% for categorie, message in messages %}
+                        {% set classe_alerte = {'error': 'alert-danger', 'success': 'alert-success', 'warning': 'alert-warning'}.get(categorie, 'alert-info') %}
+                        <div class="flash flash-{{ categorie }} alert {{ classe_alerte }}">{{ message }}</div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+
+        <div class="auth-wrapper">
+            <div class="auth-card form-card">
+                <div class="page-header">
+                    <div>
+                        <h1 class="page-title">Mon profil</h1>
+                        <p class="page-subtitle">Modifiez vos informations personnelles ou votre mot de passe.</p>
+                    </div>
+                </div>
+
+                <form method="post" action="{{ url_for('auth.profile') }}">
+                    {% if csrf_token is defined %}
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    {% endif %}
+
+                    <div class="form-grid">
+                        <div class="champ field">
+                            <label for="username">Nom d'utilisateur</label>
+                            <input type="text" id="username" name="username"
+                                   value="{{ username|default('', true) }}" required>
+                        </div>
+                        <div class="champ field">
+                            <label for="email">Adresse e-mail</label>
+                            <input type="email" id="email" name="email"
+                                   value="{{ email|default('', true) }}" required>
+                        </div>
+                    </div>
+
+                    <h2 class="section-title">Changer de mot de passe</h2>
+                    <p class="astuce field-hint">Laissez ces champs vides pour conserver votre mot de passe actuel.</p>
+                    <div class="champ field">
+                        <label for="old_password">Ancien mot de passe</label>
+                        <input type="password" id="old_password" name="old_password" autocomplete="current-password">
+                    </div>
+                    <div class="form-grid">
+                        <div class="champ field">
+                            <label for="new_password">Nouveau mot de passe</label>
+                            <input type="password" id="new_password" name="new_password" minlength="8" autocomplete="new-password">
+                        </div>
+                        <div class="champ field">
+                            <label for="new_password_confirm">Confirmer le nouveau mot de passe</label>
+                            <input type="password" id="new_password_confirm" name="new_password_confirm"
+                                   minlength="8" autocomplete="new-password">
+                        </div>
+                    </div>
+
+                    <div class="form-actions">
+                        <button type="submit" class="btn-auth btn btn-primary">Enregistrer les modifications</button>
+                    </div>
+                </form>
             </div>
-        {% endif %}
-    {% endwith %}
-
-    <div class="auth-wrapper">
-        <div class="auth-card">
-            <h1>Mon profil</h1>
-            <p>Modifiez vos informations personnelles ou votre mot de passe.</p>
-
-            <form method="post" action="{{ url_for('auth.profile') }}">
-                {% if csrf_token is defined %}
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                {% endif %}
-
-                <div class="champ">
-                    <label for="username">Nom d'utilisateur</label>
-                    <input type="text" id="username" name="username"
-                           value="{{ username|default('', true) }}" required>
-                </div>
-                <div class="champ">
-                    <label for="email">Adresse e-mail</label>
-                    <input type="email" id="email" name="email"
-                           value="{{ email|default('', true) }}" required>
-                </div>
-
-                <h2>Changer de mot de passe</h2>
-                <p class="astuce">Laissez ces champs vides pour conserver votre mot de passe actuel.</p>
-                <div class="champ">
-                    <label for="old_password">Ancien mot de passe</label>
-                    <input type="password" id="old_password" name="old_password" autocomplete="current-password">
-                </div>
-                <div class="champ">
-                    <label for="new_password">Nouveau mot de passe</label>
-                    <input type="password" id="new_password" name="new_password" minlength="8" autocomplete="new-password">
-                </div>
-                <div class="champ">
-                    <label for="new_password_confirm">Confirmer le nouveau mot de passe</label>
-                    <input type="password" id="new_password_confirm" name="new_password_confirm"
-                           minlength="8" autocomplete="new-password">
-                </div>
-
-                <button type="submit" class="btn-auth">Enregistrer les modifications</button>
-            </form>
         </div>
-    </div>
+    </main>
+</div>
 </body>
 </html>

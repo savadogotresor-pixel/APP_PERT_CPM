@@ -1,73 +1,92 @@
 <!DOCTYPE html>
 <html lang="fr">
-<head><meta charset="UTF-8">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>PERT/CPM - Groupe 3</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='accueil.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='design.css') }}">
 </head>
 <body>
-    <nav class="nav">
-        <a href="/">🏠 Accueil</a>
-        <a href="/demo">📊 Démo (12 tâches)</a>
-        <a href="/saisie">✏️ Saisie des tâches</a>
-        <a href="{{ url_for('auth.profile') }}">👤 Mon compte</a>
-        <a href="{{ url_for('projects.list_projects') }}">📁 Mes projets</a>
-        {% set lien_assistant = assistant_url|default(url_for('projects.list_projects'), true) %}
-        <a href="{{ lien_assistant }}">🤖 Assistant IA</a>
-        {% if current_user.is_authenticated and current_user.is_admin %}
-        <a href="{{ url_for('admin.index') }}">🛠️ Administration</a>
-        {% endif %}
-        {% if current_user.is_authenticated %}
-        <a href="{{ url_for('auth.logout') }}">🚪 Déconnexion</a>
-        {% else %}
-        <a href="{{ url_for('auth.login') }}">🔑 Connexion</a>
-        <a href="{{ url_for('auth.register') }}">✍️ Inscription</a>
-        {% endif %}
-    </nav>
+<div class="app-shell">
+    <header class="topbar">
+        <a class="topbar-brand" href="{{ url_for('accueil') }}"><span class="topbar-brand-icon">📊</span> PERT/CPM</a>
+        <ul class="topbar-nav">
+            <li><a href="/">🏠 Accueil</a></li>
+            <li><a href="/demo">📊 Démo (12 tâches)</a></li>
+            <li><a href="/saisie">✏️ Saisie des tâches</a></li>
+            <li><a href="{{ url_for('auth.profile') }}">👤 Mon compte</a></li>
+            <li><a href="{{ url_for('projects.list_projects') }}">📁 Mes projets</a></li>
+            <li>
+                {% set lien_assistant = assistant_url|default(url_for('projects.list_projects'), true) %}
+                <a href="{{ lien_assistant }}">🤖 Assistant IA</a>
+            </li>
+            {% if current_user.is_authenticated and current_user.is_admin %}
+            <li><a href="{{ url_for('admin.index') }}">🛠️ Administration</a></li>
+            {% endif %}
+            {% if current_user.is_authenticated %}
+            <li><a href="{{ url_for('auth.logout') }}">🚪 Déconnexion</a></li>
+            {% else %}
+            <li><a href="{{ url_for('auth.login') }}">🔑 Connexion</a></li>
+            <li><a href="{{ url_for('auth.register') }}">✍️ Inscription</a></li>
+            {% endif %}
+        </ul>
+    </header>
 
-    <div class="welcome-box">
-        <h1>🚀 PERT/CPM : pilotez vos projets avec précision</h1>
-        <p class="subtitle">De la liste de tâches au chemin critique, en quelques clics</p>
+    <main class="container">
+        <div class="page-header">
+            <div>
+                <h1 class="page-title">🚀 PERT/CPM : pilotez vos projets avec précision</h1>
+                <p class="page-subtitle">De la liste de tâches au chemin critique, en quelques clics</p>
+            </div>
+        </div>
 
-        <p>
-            Cette application combine deux méthodes complémentaires de gestion de projet :
-            le <strong>PERT</strong> pour modéliser l'enchaînement des tâches, et le
-            <strong>CPM</strong> pour déterminer la durée minimale du projet et son chemin critique.
-        </p>
+        <section class="card card-accent card-accent--primary">
+            <div class="card-body">
+                <p>
+                    Cette application combine deux méthodes complémentaires de gestion de projet :
+                    le <strong>PERT</strong> pour modéliser l'enchaînement des tâches, et le
+                    <strong>CPM</strong> pour déterminer la durée minimale du projet et son chemin critique.
+                </p>
+            </div>
+        </section>
 
-        <div class="steps">
-            <div class="step">
-                <span class="step-num">1</span>
-                <div>
-                    <h3>Décrivez vos tâches</h3>
+        <div class="card-grid">
+            <article class="card card-accent card-accent--primary">
+                <div class="card-body">
+                    <span class="badge badge-info">1</span>
+                    <h3 class="card-title mt-3">Décrivez vos tâches</h3>
                     <p>Durées, dépendances et dates de votre projet.</p>
                 </div>
-            </div>
-            <div class="step">
-                <span class="step-num">2</span>
-                <div>
-                    <h3>Lancez le calcul</h3>
+            </article>
+            <article class="card card-accent card-accent--success">
+                <div class="card-body">
+                    <span class="badge badge-success">2</span>
+                    <h3 class="card-title mt-3">Lancez le calcul</h3>
                     <p>Dates au plus tôt/tard et marges sont déterminées automatiquement.</p>
                 </div>
-            </div>
-            <div class="step">
-                <span class="step-num">3</span>
-                <div>
-                    <h3>Visualisez le résultat</h3>
+            </article>
+            <article class="card card-accent card-accent--warning">
+                <div class="card-body">
+                    <span class="badge badge-warning">3</span>
+                    <h3 class="card-title mt-3">Visualisez le résultat</h3>
                     <p>Chemin critique mis en évidence sur le Gantt et le graphe PERT.</p>
                 </div>
-            </div>
+            </article>
         </div>
 
-        <div class="actions">
-            <a href="/demo" class="btn btn-primary">📊 Découvrir la démo (12 tâches)</a>
-            <a href="/saisie" class="btn btn-secondary">✏️ Saisir vos tâches</a>
+        <div class="actions-bar">
+            <a href="/demo" class="btn btn-primary btn-lg">📊 Découvrir la démo (12 tâches)</a>
+            <a href="/saisie" class="btn btn-secondary btn-lg">✏️ Saisir vos tâches</a>
         </div>
 
-        <p class="group-info">
+        <hr class="divider">
+        <p class="meta">
             Projet académique — Licence 3 MSCS · UVBF &nbsp;|&nbsp; <strong>Groupe 3</strong> :
             SAVADOGO Ahmed Hussen Ramadan Trésor 2ème Jumeau, KONFE Wendmanegda Jeanne Esther, GUIRA Oumarou, NAKOULMA Yamba
         </p>
-    </div>
+    </main>
+</div>
 </body>
 </html>

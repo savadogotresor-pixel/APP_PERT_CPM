@@ -2,50 +2,71 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Saisie personnalisée - PERT/CPM</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='saisie.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='design.css') }}">
 </head>
 <body>
-    <nav class="nav">
-        <a href="/">🏠 Accueil</a>
-        <a href="/demo">📊 Démo (12 tâches)</a>
-        <a href="/saisie">✏️ Saisie des tâches</a>
-        <a href="{{ url_for('auth.profile') }}">👤 Mon compte</a>
-        <a href="{{ url_for('projects.list_projects') }}">📁 Mes projets</a>
-        {% if current_user.is_authenticated %}
-        <a href="{{ url_for('auth.logout') }}">🚪 Déconnexion</a>
-        {% else %}
-        <a href="{{ url_for('auth.login') }}">🔑 Connexion</a>
-        <a href="{{ url_for('auth.register') }}">✍️ Inscription</a>
-        {% endif %}
-    </nav>
+<div class="app-shell">
+    <header class="topbar">
+        <a class="topbar-brand" href="{{ url_for('accueil') }}"><span class="topbar-brand-icon">📊</span> PERT/CPM</a>
+        <ul class="topbar-nav">
+            <li><a href="/">🏠 Accueil</a></li>
+            <li><a href="/demo">📊 Démo (12 tâches)</a></li>
+            <li><a href="/saisie">✏️ Saisie des tâches</a></li>
+            <li><a href="{{ url_for('auth.profile') }}">👤 Mon compte</a></li>
+            <li><a href="{{ url_for('projects.list_projects') }}">📁 Mes projets</a></li>
+            {% if current_user.is_authenticated %}
+            <li><a href="{{ url_for('auth.logout') }}">🚪 Déconnexion</a></li>
+            {% else %}
+            <li><a href="{{ url_for('auth.login') }}">🔑 Connexion</a></li>
+            <li><a href="{{ url_for('auth.register') }}">✍️ Inscription</a></li>
+            {% endif %}
+        </ul>
+    </header>
 
-    <h1>Saisir vos propres tâches</h1>
-    <p>Format : <code>nom;description;durée;dépendances séparées par des virgules</code></p>
-    <p>Exemple : <code>A;Analyse;3;</code> puis <code>B;Conception;4;A</code></p>
+    <main class="container">
+        <div class="page-header">
+            <div>
+                <h1 class="page-title">Saisir vos propres tâches</h1>
+            </div>
+        </div>
 
-    <form action="/resultats_custom" method="POST" id="form-saisie">
-        <label>Date de début du projet :</label><br>
-        <input type="text" id="date_debut_affichage" placeholder="JJ/MM/AAAA"
-               class="champ-date"
-               oninput="convertirDate(this, 'date_debut_iso')">
-        <input type="hidden" name="date_debut" id="date_debut_iso"><br>
+        <form action="/resultats_custom" method="POST" id="form-saisie" class="form-card">
+            <div class="form-grid">
+                <div class="field">
+                    <label for="date_debut_affichage">Date de début du projet :</label>
+                    <input type="text" id="date_debut_affichage" placeholder="JJ/MM/AAAA"
+                           class="champ-date"
+                           oninput="convertirDate(this, 'date_debut_iso')">
+                    <input type="hidden" name="date_debut" id="date_debut_iso">
+                </div>
+                <div class="field">
+                    <label for="date_fin_affichage">Date de fin souhaitée <em>(optionnel — pour optimiser le planning)</em> :</label>
+                    <input type="text" id="date_fin_affichage" placeholder="JJ/MM/AAAA"
+                           class="champ-date"
+                           oninput="convertirDate(this, 'date_fin_iso')">
+                    <input type="hidden" name="date_fin_cible" id="date_fin_iso">
+                </div>
+            </div>
 
-        <label>Date de fin souhaitée <em>(optionnel — pour optimiser le planning)</em> :</label><br>
-        <input type="text" id="date_fin_affichage" placeholder="JJ/MM/AAAA"
-               class="champ-date"
-               oninput="convertirDate(this, 'date_fin_iso')">
-        <input type="hidden" name="date_fin_cible" id="date_fin_iso"><br>
+            <div class="field mt-4">
+                <label>Tâches :</label>
+                <p class="field-hint">Format : <code>nom;description;durée;dépendances séparées par des virgules</code></p>
+                <p class="field-hint">Exemple : <code>A;Analyse;3;</code> puis <code>B;Conception;4;A</code></p>
+                <textarea name="taches" rows="12" cols="60"
+                    placeholder="A;Analyse des besoins;3;
+ B;Conception BDD;4;A
+ C;Maquettes;4;A"></textarea>
+            </div>
 
-        <label>Tâches :</label><br>
-        <textarea name="taches" rows="12" cols="60"
-            placeholder="A;Analyse des besoins;3;
-B;Conception BDD;4;A
-C;Maquettes;4;A"></textarea>
-        <br><br>
-        <button type="submit">Calculer</button>
-    </form>
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary">Calculer</button>
+            </div>
+        </form>
+    </main>
 
     <script>
     function convertirDate(input, idCible) {
@@ -75,5 +96,6 @@ C;Maquettes;4;A"></textarea>
         }
     });
     </script>
+</div>
 </body>
 </html>

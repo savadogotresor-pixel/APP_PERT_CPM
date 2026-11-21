@@ -6,48 +6,53 @@
     <title>Assistant IA — {{ projet.name }} — PERT/CPM</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <style>
-        .ia-page { max-width: 940px; margin: 0 auto; }
-        .ia-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
-        .ia-nav { justify-content: flex-end; }
-        .ia-transparence { background: #eff6ff; border-left: 4px solid #2563eb; color: #1e3a8a; padding: 12px 16px; border-radius: 6px; margin: 16px 0; line-height: 1.5; }
-        .ia-sans-ia { background: #fffbeb; border-left: 4px solid #d97706; color: #92400e; padding: 12px 16px; border-radius: 6px; margin: 16px 0; }
-        .ia-flash { padding: 10px 14px; border-radius: 6px; margin-bottom: 10px; font-size: .9rem; }
-        .ia-flash-success { background: #dcfce7; color: #166534; }
-        .ia-flash-error { background: #fee2e2; color: #991b1b; }
-        .ia-synthese { color: #4b5563; font-size: .9rem; margin: 0 0 12px; }
-        .ia-conversation { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; height: 420px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
-        .ia-vide { color: #6b7280; font-style: italic; margin: auto; text-align: center; }
-        .bulle { max-width: 85%; padding: 10px 14px; border-radius: 12px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+        /* Spécifique à la page : conversation façon messagerie. */
+        .ia-conversation {
+            height: 420px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            padding: 16px;
+        }
+        .ia-conversation .bulle.card { margin-bottom: 0; }
+        .ia-vide { margin: auto; text-align: center; }
+        .bulle {
+            max-width: 85%;
+            padding: 10px 14px;
+            border-radius: 12px;
+            line-height: 1.5;
+            white-space: pre-wrap;
+            overflow-wrap: anywhere;
+            box-shadow: 0 1px 3px rgba(15, 23, 42, 0.1);
+        }
         .bulle.utilisateur { align-self: flex-end; background: #2563eb; color: #fff; border-bottom-right-radius: 2px; }
         .bulle.assistant { align-self: flex-start; background: #f3f4f6; color: #111827; border-bottom-left-radius: 2px; }
         .bulle.erreur { align-self: center; background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
-        .meta { margin-top: 10px; border-top: 1px solid #d1d5db; padding-top: 8px; font-size: .8rem; color: #374151; }
-        .meta p { margin: 4px 0; }
-        .meta ul { margin: 2px 0 6px 18px; padding: 0; }
-        .meta .horodatage { color: #6b7280; font-style: italic; }
-        .ia-formulaire { margin-top: 16px; display: flex; flex-direction: column; gap: 10px; }
-        .ia-formulaire textarea { width: 100%; min-height: 90px; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font: inherit; resize: vertical; }
-        .ia-formulaire button, .suggestions button { background: #2563eb; color: #fff; border: 0; border-radius: 6px; padding: 9px 16px; font-weight: 600; cursor: pointer; }
-        .ia-formulaire button:disabled { background: #93c5fd; cursor: wait; }
-        .suggestions { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
-        .suggestions button { background: #e5e7eb; color: #1f2937; font-weight: 500; font-size: .85rem; }
-        .suggestions button:hover { background: #d1d5db; }
-        .ia-configuration { color: #6b7280; font-size: .82rem; margin-top: 10px; }
+        .ia-conversation .meta { margin-top: 10px; border-top: 1px solid #d1d5db; padding-top: 8px; font-size: .8rem; color: #374151; }
+        .ia-conversation .meta p { margin: 4px 0; }
+        .ia-conversation .meta ul { margin: 2px 0 6px 18px; padding: 0; }
+        .ia-conversation .meta .horodatage { color: #6b7280; font-style: italic; }
     </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='design.css') }}">
 </head>
 <body>
-    <nav class="nav ia-nav">
-        <a href="{{ url_for('accueil') }}">Accueil</a>
-        <a href="{{ url_for('projects.list_projects') }}">Mes projets</a>
-        <a href="{{ url_for('projects.detail', project_id=projet.id) }}">Détail du projet</a>
-        <a href="{{ url_for('auth.logout') }}">Déconnexion</a>
-    </nav>
+<div class="app-shell">
+    <header class="topbar">
+        <a class="topbar-brand" href="{{ url_for('accueil') }}"><span class="topbar-brand-icon">📊</span> PERT/CPM</a>
+        <ul class="topbar-nav">
+            <li><a href="{{ url_for('accueil') }}">Accueil</a></li>
+            <li><a href="{{ url_for('projects.list_projects') }}">Mes projets</a></li>
+            <li><a href="{{ url_for('projects.detail', project_id=projet.id) }}">Détail du projet</a></li>
+            <li><a href="{{ url_for('auth.logout') }}">Déconnexion</a></li>
+        </ul>
+    </header>
 
-    <main class="ia-page">
-        <div class="ia-head">
+    <main class="container">
+        <div class="page-header">
             <div>
-                <h1>🤖 Assistant IA — {{ projet.name }}</h1>
-                <p class="ia-synthese">
+                <h1 class="page-title">🤖 Assistant IA — {{ projet.name }}</h1>
+                <p class="page-subtitle ia-synthese">
                     Durée totale calculée : {{ duree_totale }} jour(s)
                     &nbsp;·&nbsp; {{ taches|length }} tâche(s)
                     &nbsp;·&nbsp; {{ chemins_critiques|length }} chemin(s) critique(s)
@@ -55,35 +60,43 @@
             </div>
         </div>
 
-        <div class="ia-transparence">
-            <strong>Données transmises au fournisseur IA :</strong> uniquement les
-            codes, durées, descriptions et résultats calculés du projet. Aucun mot
-            de passe ni secret n'est transmis. Les chiffres affichés proviennent
-            du moteur PERT/CPM.
+        <div class="alert alert-info ia-transparence">
+            <div>
+                <strong>Données transmises au fournisseur IA :</strong> uniquement les
+                codes, durées, descriptions et résultats calculés du projet. Aucun mot
+                de passe ni secret n'est transmis. Les chiffres affichés proviennent
+                du moteur PERT/CPM.
+            </div>
         </div>
 
         {% if not disponible %}
-        <div class="ia-sans-ia">
-            <strong>Mode sans IA actif :</strong> les réponses sont générées
-            localement à partir des seuls résultats calculés par le moteur
-            PERT/CPM. Aucun appel à un fournisseur externe n'est effectué.
+        <div class="alert alert-warning ia-sans-ia">
+            <div>
+                <strong>Mode sans IA actif :</strong> les réponses sont générées
+                localement à partir des seuls résultats calculés par le moteur
+                PERT/CPM. Aucun appel à un fournisseur externe n'est effectué.
+            </div>
         </div>
         {% endif %}
 
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
+                <div class="flashes">
                 {% for categorie, message in messages %}
-                <div class="ia-flash ia-flash-{{ categorie }}">{{ message }}</div>
+                    {% set classe_alerte = {'error': 'alert-danger', 'danger': 'alert-danger', 'success': 'alert-success', 'warning': 'alert-warning'}.get(categorie, 'alert-info') %}
+                    <div class="alert {{ classe_alerte }} flash ia-flash ia-flash-{{ categorie }}">{{ message }}</div>
                 {% endfor %}
+                </div>
             {% endif %}
         {% endwith %}
 
-        <div id="conversation" class="ia-conversation" role="log" aria-live="polite">
+        <h2 class="section-title">Conversation</h2>
+        <div id="conversation" class="ia-conversation table-wrapper" role="log" aria-live="polite">
             {% for message in historique %}
                 {% if message.get('role') == 'user' %}
-                <div class="bulle utilisateur">{{ message.get('texte', '') }}</div>
+                <div class="bulle utilisateur card">{{ message.get('texte', '') }}</div>
                 {% else %}
-                <div class="bulle assistant">
+                <div class="bulle assistant card">
                     <div class="texte-reponse">{{ message.get('texte', '') }}</div>
                     <div class="meta">
                         <p>Réponse enregistrée dans cette session. Les métadonnées
@@ -99,27 +112,32 @@
             {% endfor %}
         </div>
 
-        <div class="suggestions" aria-label="Questions suggérées">
-            <button type="button" data-question="Quelle est la durée totale du projet ?">Durée totale</button>
-            <button type="button" data-question="Quelles sont les tâches critiques ?">Tâche critique</button>
-            <button type="button" data-question="Quelles tâches peuvent être réalisées en simultané ?">Simultanéité</button>
-            <button type="button" data-question="Fais-moi un rapport du planning.">Rapport</button>
+        <div class="suggestions actions-bar" aria-label="Questions suggérées">
+            <button class="btn btn-sm btn-secondary" type="button" data-question="Quelle est la durée totale du projet ?">Durée totale</button>
+            <button class="btn btn-sm btn-secondary" type="button" data-question="Quelles sont les tâches critiques ?">Tâche critique</button>
+            <button class="btn btn-sm btn-secondary" type="button" data-question="Quelles tâches peuvent être réalisées en simultané ?">Simultanéité</button>
+            <button class="btn btn-sm btn-secondary" type="button" data-question="Fais-moi un rapport du planning.">Rapport</button>
         </div>
 
-        <form id="formulaire-ia" class="ia-formulaire" method="post" action="{{ question_url }}">
+        <form id="formulaire-ia" class="form-card ia-formulaire" method="post" action="{{ question_url }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <label for="question">Votre question</label>
-            <textarea id="question" name="question" required
-                      placeholder="Ex. : Pourquoi cette tâche est-elle critique ?"></textarea>
-            <button id="bouton-envoi" type="submit">Envoyer</button>
+            <div class="field">
+                <label for="question">Votre question</label>
+                <textarea id="question" name="question" required
+                          placeholder="Ex. : Pourquoi cette tâche est-elle critique ?"></textarea>
+            </div>
+            <div class="form-actions">
+                <button id="bouton-envoi" class="btn btn-primary" type="submit">Envoyer</button>
+            </div>
         </form>
 
-        <p class="ia-configuration">
-            Modele : {{ configuration.get('modele', '—') }}
+        <p class="meta ia-configuration">
+            Modèle : {{ configuration.get('modele', '—') }}
             &nbsp;·&nbsp; Limite : {{ configuration.get('max_appels_par_heure', '—') }} questions/heure
             &nbsp;·&nbsp; La clé API reste côté serveur et n'est jamais affichée.
         </p>
     </main>
+</div>
 
     <script>
     (function () {

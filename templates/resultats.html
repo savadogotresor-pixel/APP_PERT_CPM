@@ -1,49 +1,77 @@
 <!DOCTYPE html>
 <html lang="fr">
-<head><meta charset="UTF-8">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Résultats PERT/CPM</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='resultats.css') }}">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/frappe-gantt@0.6.1/dist/frappe-gantt.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='design.css') }}">
 </head>
 <body>
 
-    <nav class="nav">
-        <a href="/">🏠 Accueil</a>
-        <a href="/demo">📊 Démo (12 tâches)</a>
-        <a href="/saisie">✏️ Saisie des tâches</a>
-        <a href="{{ url_for('auth.profile') }}">👤 Mon compte</a>
-        <a href="{{ url_for('projects.list_projects') }}">📁 Mes projets</a>
-        {% if current_user.is_authenticated %}
-        <a href="{{ url_for('auth.logout') }}">🚪 Déconnexion</a>
-        {% else %}
-        <a href="{{ url_for('auth.login') }}">🔑 Connexion</a>
-        <a href="{{ url_for('auth.register') }}">✍️ Inscription</a>
+<div class="app-shell">
+    <header class="topbar">
+        <a class="topbar-brand" href="{{ url_for('accueil') }}"><span class="topbar-brand-icon">📊</span> PERT/CPM</a>
+        <ul class="topbar-nav">
+            <li><a href="/">🏠 Accueil</a></li>
+            <li><a href="/demo">📊 Démo (12 tâches)</a></li>
+            <li><a href="/saisie">✏️ Saisie des tâches</a></li>
+            <li><a href="{{ url_for('auth.profile') }}">👤 Mon compte</a></li>
+            <li><a href="{{ url_for('projects.list_projects') }}">📁 Mes projets</a></li>
+            {% if current_user.is_authenticated %}
+            <li><a href="{{ url_for('auth.logout') }}">🚪 Déconnexion</a></li>
+            {% else %}
+            <li><a href="{{ url_for('auth.login') }}">🔑 Connexion</a></li>
+            <li><a href="{{ url_for('auth.register') }}">✍️ Inscription</a></li>
+            {% endif %}
+        </ul>
+    </header>
+
+    <main class="container">
+    <div class="page-header">
+        <div>
+            <h1 class="page-title">Résultats du calcul</h1>
+            <p class="page-subtitle">Chemin critique, échéances et marges du projet</p>
+        </div>
+    </div>
+    <div class="stat-grid">
+        {% if date_debut %}
+        <div class="stat-card stat-card--primary">
+            <span class="stat-label">Date de début :</span>
+            <strong class="stat-value">{{ date_debut.split('-')[2] }}/{{ date_debut.split('-')[1] }}/{{ date_debut.split('-')[0] }}</strong>
+        </div>
         {% endif %}
-    </nav>
+        <div class="stat-card stat-card--primary">
+            <span class="stat-label">Durée totale du projet :</span>
+            <strong class="stat-value">{{ duree_totale }} jours</strong>
+        </div>
+        <div class="stat-card stat-card--danger">
+            <span class="stat-label">Chemin critique :</span>
+            <strong class="mt-2">{{ chemin_critique | join(' → ') }}</strong>
+        </div>
+        <div class="stat-card stat-card--warning">
+            <span class="stat-label">Chemins critiques ({{ chemins_critiques | default([]) | length }}) :</span>
+            <strong class="mt-2">{% for chemin in chemins_critiques | default([]) %}{{ chemin | join(' → ') }}{% if not loop.last %} | {% endif %}{% endfor %}</strong>
+        </div>
+    </div>
 
-    <h1>Résultats du calcul</h1>
-    {% if date_debut %}
-    <p>Date de début : <strong>
-        {{ date_debut.split('-')[2] }}/{{ date_debut.split('-')[1] }}/{{ date_debut.split('-')[0] }}
-    </strong></p>
-    {% endif %}
-    <p>Durée totale du projet : <strong>{{ duree_totale }} jours</strong></p>
-    <p>Chemin critique : <strong>{{ chemin_critique | join(' → ') }}</strong></p>
-    <p>Chemins critiques ({{ chemins_critiques | default([]) | length }}) : <strong>{% for chemin in chemins_critiques | default([]) %}{{ chemin | join(' → ') }}{% if not loop.last %} | {% endif %}{% endfor %}</strong></p>
-
-    <button id="btn-actualiser" type="button" onclick="actualiserVisualisations()">🔄 Actualiser les visualisations</button>
+    <div class="actions-bar">
+        <button id="btn-actualiser" class="btn btn-secondary" type="button" onclick="actualiserVisualisations()">🔄 Actualiser les visualisations</button>
+    </div>
 
     <div id="contenu-export">
 
-        <table border="1" cellpadding="6">
+        <div class="table-wrapper">
+        <table border="1" cellpadding="6" class="data-table">
             <tr>
                 <th>Tâche</th><th>Description</th><th>Durée</th>
                 <th>ES</th><th>EF</th><th>LS</th><th>LF</th>
                 <th>Marge totale</th><th>Marge libre</th><th>Critique ?</th>
             </tr>
             {% for nom, r in resultats.items() %}
-            <tr {% if r.critique %}class="ligne-critique"{% endif %}>
+            <tr {% if r.critique %}class="ligne-critique row-critical"{% endif %}>
                 <td>{{ nom }}</td>
                 <td>{{ taches[nom].description }}</td>
                 <td>{{ taches[nom].duree }} j</td>
@@ -53,10 +81,11 @@
                 <td>{{ r.LF }}</td>
                 <td>{{ r.marge }}</td>
                 <td>{{ r.marge_libre }}</td>
-                <td>{{ "OUI" if r.critique else "Non" }}</td>
+                <td><span class="badge {% if r.critique %}badge-critical{% else %}badge-muted{% endif %}">{{ "OUI" if r.critique else "Non" }}</span></td>
             </tr>
             {% endfor %}
         </table>
+        </div>
 
         <details class="aide">
             <summary>ℹ️ Comment sont calculées les dates et la marge (ES, EF, LS, LF) ?</summary>
@@ -100,14 +129,18 @@
 
         {% if conseils %}
         <div class="conseils">
-            <h2>💡 Conseils d'optimisation</h2>
+            <h2 class="section-title">💡 Conseils d'optimisation</h2>
             {% for c in conseils %}
             <p class="conseil conseil-{{ c.type }}">{{ c.texte }}</p>
             {% endfor %}
         </div>
         {% endif %}
 
-        <h2>Graphe PERT</h2>
+        <section class="card">
+            <div class="card-header">
+                <h2 class="card-title section-title">Graphe PERT</h2>
+            </div>
+            <div class="card-body">
         <details class="aide">
             <summary>ℹ️ Comment lire ce graphe ?</summary>
             <p>
@@ -119,8 +152,14 @@
             </p>
         </details>
         <div id="graphe"></div>
+            </div>
+        </section>
 
-        <h2>Diagramme de Gantt</h2>
+        <section class="card">
+            <div class="card-header">
+                <h2 class="card-title section-title">Diagramme de Gantt</h2>
+            </div>
+            <div class="card-body">
         <details class="aide">
             <summary>ℹ️ Comment ce diagramme a-t-il été construit ?</summary>
             <p>
@@ -134,15 +173,19 @@
                 afficher le détail de ses dates.
             </p>
         </details>
-        <div class="controles-gantt">
-            <button type="button" data-vue="Day">Jour</button>
-            <button type="button" data-vue="Week">Semaine</button>
-            <button type="button" data-vue="Month">Mois</button>
-            <button type="button" data-vue="Quarter">Trimestre</button>
+        <div class="actions-bar">
+            <div class="controles-gantt">
+                <button type="button" class="btn btn-sm btn-secondary" data-vue="Day">Jour</button>
+                <button type="button" class="btn btn-sm btn-secondary" data-vue="Week">Semaine</button>
+                <button type="button" class="btn btn-sm btn-secondary" data-vue="Month">Mois</button>
+                <button type="button" class="btn btn-sm btn-secondary" data-vue="Quarter">Trimestre</button>
+            </div>
         </div>
         <div id="gantt-container">
             <svg id="gantt"></svg>
         </div>
+            </div>
+        </section>
 
     </div>
 
@@ -175,7 +218,8 @@
 
     <aside id="fiche-tache" class="fiche-tache" hidden>
         <button id="fiche-fermer" type="button">✕</button>
-        <h2>Fiche tâche</h2>
+        <h2 class="card-title">Fiche tâche</h2>
+        <div class="card-body">
         <p><strong>Code :</strong> <span id="fiche-code"></span></p>
         <p><strong>Description :</strong> <span id="fiche-description"></span></p>
         <p><strong>Durée :</strong> <span id="fiche-duree"></span></p>
@@ -183,6 +227,7 @@
         <p><strong>Marges :</strong> <span id="fiche-marges"></span></p>
         <p><strong>Criticité :</strong> <span id="fiche-criticite"></span></p>
         <p><strong>Prédécesseurs :</strong> <span id="fiche-predecesseurs"></span></p>
+        </div>
     </aside>
 
     <script src="https://unpkg.com/vis-network@9.1.9/standalone/umd/vis-network.min.js"></script>
@@ -309,7 +354,9 @@
         }
     </script>
 
-    <button onclick="exporterPDF()">📄 Télécharger en PDF</button>
+    <div class="actions-bar">
+        <button class="btn btn-primary" onclick="exporterPDF()">📄 Télécharger en PDF</button>
+    </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -352,7 +399,9 @@
         }
     </script>
 
-    <button onclick="exporterExcel()">📊 Télécharger en Excel</button>
+    <div class="actions-bar">
+        <button class="btn btn-secondary" onclick="exporterExcel()">📊 Télécharger en Excel</button>
+    </div>
 
     <script>
         const TACHES_TEXTE = {{ taches_texte | tojson }};
@@ -392,6 +441,9 @@
             URL.revokeObjectURL(url);
         }
     </script>
+
+    </main>
+</div>
 
 </body>
 </html>

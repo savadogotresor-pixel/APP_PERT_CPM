@@ -5,195 +5,221 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Action en langage naturel — {{ projet.name }}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    <style>
-        .mp-page { max-width: 1100px; }
-        .mp-nav { justify-content: flex-end; }
-        .mp-aide { font-size: .85rem; color: #6b7280; line-height: 1.55; }
-        .mp-bandeau { background: #fffbeb; border: 2px solid #f59e0b; border-left: 6px solid #d97706; color: #92400e; padding: 14px 18px; border-radius: 8px; margin: 16px 0 20px; font-weight: 700; }
-        .mp-alerte { background: #fef2f2; border: 2px solid #fca5a5; border-left: 6px solid #dc2626; color: #991b1b; padding: 14px 18px; border-radius: 8px; margin: 14px 0 20px; line-height: 1.55; }
-        .mp-encadre { background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 14px 18px; margin: 14px 0; }
-        .mp-encadre h2, .mp-encadre h3 { margin: 0 0 8px; font-size: 1rem; color: #1e3a8a; }
-        .mp-encadre p, .mp-encadre ul { margin: 0; line-height: 1.6; }
-        .mp-encadre ul { padding-left: 20px; }
-        .mp-table { width: 100%; border-collapse: collapse; font-size: .86rem; margin: 10px 0 18px; }
-        .mp-table th, .mp-table td { border: 1px solid #e5e7eb; padding: 8px 10px; text-align: left; vertical-align: top; }
-        .mp-table th { background: #f3f4f6; color: #374151; }
-        .mp-table td ul { margin: 0; padding-left: 18px; }
-        .mp-badge { display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: .78rem; font-weight: 700; background: #dbeafe; color: #1e40af; }
-        .mp-badge-danger { background: #fee2e2; color: #991b1b; }
-        .mp-formulaire label { display: block; font-weight: 600; color: #374151; margin: 12px 0 5px; }
-        .mp-formulaire textarea { width: 100%; min-height: 110px; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-family: inherit; font-size: .92rem; }
-        .mp-formulaire input[type="text"] { padding: 9px 11px; border: 1px solid #d1d5db; border-radius: 6px; font-size: .92rem; width: 240px; }
-        .mp-btn { display: inline-block; background: #2563eb; color: #fff; padding: 9px 16px; border-radius: 6px; font-size: .88rem; font-weight: 600; text-decoration: none; border: 0; cursor: pointer; margin: 10px 8px 0 0; }
-        .mp-btn:hover { background: #1d4ed8; color: #fff; text-decoration: none; }
-        .mp-btn-danger { background: #b91c1c; }
-        .mp-btn-danger:hover { background: #991b1b; }
-        .mp-btn-neutre { background: #e5e7eb; color: #1f2937; }
-        .mp-btn-neutre:hover { background: #d1d5db; color: #111827; }
-        .mp-flash { padding: 10px 14px; border-radius: 6px; margin-bottom: 10px; font-size: .9rem; }
-        .mp-flash-success { background: #dcfce7; color: #166534; }
-        .mp-flash-error { background: #fee2e2; color: #991b1b; }
-        .mp-erreur { color: #991b1b; background: #fef2f2; border: 1px solid #fca5a5; border-radius: 6px; padding: 10px 14px; }
-        .mp-confirmation { font-size: 1.1rem; font-weight: 700; color: #1e3a8a; }
-        code { background: #f1f5f9; padding: 1px 5px; border-radius: 4px; }
-    </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='design.css') }}">
 </head>
 <body>
-    <nav class="nav mp-nav">
-        <a href="{{ accueil_url }}">Accueil</a>
-        <a href="{{ mes_projets_url }}">Mes projets</a>
-        <a href="{{ url_for('projects.detail', project_id=projet.id) }}">Détail du projet</a>
-        {% if current_user.is_authenticated %}
-        <a href="{{ deconnexion_url }}">Déconnexion</a>
-        {% endif %}
-    </nav>
+<div class="app-shell">
+    <header class="topbar">
+        <a class="topbar-brand" href="{{ url_for('accueil') }}"><span class="topbar-brand-icon">📊</span> PERT/CPM</a>
+        <ul class="topbar-nav">
+            <li><a href="{{ accueil_url }}">Accueil</a></li>
+            <li><a href="{{ mes_projets_url }}">Mes projets</a></li>
+            <li><a href="{{ url_for('projects.detail', project_id=projet.id) }}">Détail du projet</a></li>
+            {% if current_user.is_authenticated %}
+            <li><a href="{{ deconnexion_url }}">Déconnexion</a></li>
+            {% endif %}
+        </ul>
+    </header>
 
-    <main class="mp-page">
-        <h1>Action en langage naturel (IA)</h1>
-        <p class="mp-aide">Projet : <strong>{{ projet.name }}</strong></p>
+    <main class="container">
+        <div class="page-header">
+            <div>
+                <h1 class="page-title">Action en langage naturel (IA)</h1>
+                <p class="page-subtitle mp-aide">Projet : <strong>{{ projet.name }}</strong></p>
+            </div>
+        </div>
 
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
+                <div class="flashes">
                 {% for categorie, message in messages %}
-                <div class="mp-flash mp-flash-{{ categorie }}">{{ message }}</div>
+                    {% set classe_alerte = {'error': 'alert-danger', 'danger': 'alert-danger', 'success': 'alert-success', 'warning': 'alert-warning'}.get(categorie, 'alert-info') %}
+                    <div class="alert {{ classe_alerte }} flash mp-flash mp-flash-{{ categorie }}">{{ message }}</div>
                 {% endfor %}
+                </div>
             {% endif %}
         {% endwith %}
 
-        <div class="mp-bandeau">
+        <div class="alert alert-warning mp-bandeau">
             Toute modification nécessite une confirmation explicite ; aucun changement n'est appliqué à l'étape de prévisualisation.
         </div>
 
-        <div class="mp-encadre">
-            <h2>Exemples de demandes comprises</h2>
-            <ul>
-                <li>« augmente la durée de la tâche B de 2 jours » ou « durée B +2 » ;</li>
-                <li>« diminue la durée de B de 2 jours » ; « fixe la durée de B à 5 jours » ;</li>
-                <li>« ajoute une tâche C après B » ou « ajoute une phase de tests après B » ;</li>
-                <li>« ajoute A comme prédécesseur de B » ;</li>
-                <li>« supprime la tâche X » (confirmation renforcée).</li>
-            </ul>
-            <p class="mp-aide">
-                Seules ces formulations sont reconnues. Une demande ambiguë ne
-                produit aucune modification : elle est signalée comme telle.
-            </p>
-        </div>
+        <section class="card">
+            <div class="card-header">
+                <h2 class="card-title">Exemples de demandes comprises</h2>
+                <span class="badge badge-info">Prévisualisation</span>
+            </div>
+            <div class="card-body">
+                <ul>
+                    <li>« augmente la durée de la tâche B de 2 jours » ou « durée B +2 » ;</li>
+                    <li>« diminue la durée de B de 2 jours » ; « fixe la durée de B à 5 jours » ;</li>
+                    <li>« ajoute une tâche C après B » ou « ajoute une phase de tests après B » ;</li>
+                    <li>« ajoute A comme prédécesseur de B » ;</li>
+                    <li>« supprime la tâche X » (confirmation renforcée).</li>
+                </ul>
+                <p class="meta mp-aide mt-3">
+                    Seules ces formulations sont reconnues. Une demande ambiguë ne
+                    produit aucune modification : elle est signalée comme telle.
+                </p>
+            </div>
+        </section>
 
-        <form class="mp-formulaire" method="post" action="{{ url_for('ia_gestion.action_assistee', project_id=projet.id) }}">
+        <form class="form-card mp-formulaire" method="post" action="{{ url_for('ia_gestion.action_assistee', project_id=projet.id) }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="etape" value="preparer">
-            <label for="texte-action">Votre demande</label>
-            <textarea id="texte-action" name="texte" placeholder="Ex. : augmente la durée de la tâche B de 2 jours">{{ texte or '' }}</textarea>
-            <button class="mp-btn" type="submit">Prévisualiser les changements</button>
+            <div class="field">
+                <label for="texte-action">Votre demande</label>
+                <textarea id="texte-action" name="texte" placeholder="Ex. : augmente la durée de la tâche B de 2 jours">{{ texte or '' }}</textarea>
+                <span class="field-hint">Aucune modification n'est appliquée à l'étape de prévisualisation.</span>
+            </div>
+            <div class="form-actions">
+                <button class="btn btn-primary mp-btn" type="submit">Prévisualiser les changements</button>
+            </div>
         </form>
 
         {% if proposition %}
         <section aria-labelledby="proposition-titre">
-            <h2 id="proposition-titre">Proposition préparée</h2>
-            <table class="mp-table">
-                <tbody>
-                    <tr><th>Type d'action</th><td>{{ proposition.get('type', '—') }}</td></tr>
-                    <tr><th>Cible</th><td>{{ proposition.get('cible') or '—' }}</td></tr>
-                    <tr><th>Description</th><td>{{ proposition.get('description', '—') }}</td></tr>
-                    <tr><th>Confiance</th><td>{{ proposition.get('confiance', '—') }}</td></tr>
-                    <tr>
-                        <th>Confirmation requise</th>
-                        <td>
-                            <span class="mp-confirmation">{{ confirmation_requise or '—' }}</span>
-                            {% if proposition.get('destructrice') %}
-                            <span class="mp-badge mp-badge-danger">Action destructrice</span>
+            <h2 id="proposition-titre" class="section-title">Proposition préparée</h2>
+
+            <div class="card-grid">
+                <article class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">Détail de la proposition</h3>
+                        <span class="badge {{ 'badge-critical' if proposition.get('destructrice') else 'badge-info' }}">
+                            {{ 'Action destructrice' if proposition.get('destructrice') else 'Prévisualisation' }}
+                        </span>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-wrapper">
+                            <table class="data-table mp-table">
+                                <tbody>
+                                    <tr><th>Type d'action</th><td><span class="badge badge-info">{{ proposition.get('type', '—') }}</span></td></tr>
+                                    <tr><th>Cible</th><td>{{ proposition.get('cible') or '—' }}</td></tr>
+                                    <tr><th>Description</th><td>{{ proposition.get('description', '—') }}</td></tr>
+                                    <tr><th>Confiance</th><td>{{ proposition.get('confiance', '—') }}</td></tr>
+                                    <tr>
+                                        <th>Confirmation requise</th>
+                                        <td>
+                                            <span class="mp-confirmation">{{ confirmation_requise or '—' }}</span>
+                                            {% if proposition.get('destructrice') %}
+                                            <span class="badge badge-critical mp-badge mp-badge-danger">Action destructrice</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </article>
+
+                <article class="card">
+                    <div class="card-header"><h3 class="card-title">Changements envisagés</h3></div>
+                    <div class="card-body">
+                        <ul>
+                            {% for changement in proposition.get('changements', []) %}
+                            <li>{{ changement }}</li>
+                            {% else %}
+                            <li>Aucun changement envisagé.</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                </article>
+
+                <article class="card">
+                    <div class="card-header"><h3 class="card-title">Paramètres proposés</h3></div>
+                    <div class="card-body">
+                        {% set parametres = proposition.get('parametres', {}) %}
+                        {% if parametres is mapping %}
+                        <ul>
+                            {% for cle, valeur in parametres.items() %}
+                            <li><strong>{{ cle }}</strong> : {{ valeur }}</li>
+                            {% endfor %}
+                        </ul>
+                        {% else %}
+                        <p>{{ parametres }}</p>
+                        {% endif %}
+                    </div>
+                </article>
+
+                {% if proposition.get('avertissements') %}
+                <article class="card card-accent card-accent--warning">
+                    <div class="card-header"><h3 class="card-title">Avertissements</h3></div>
+                    <div class="card-body">
+                        <ul>
+                            {% for avertissement in proposition.get('avertissements', []) %}
+                            <li>{{ avertissement }}</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                </article>
+                {% endif %}
+
+                {% if erreurs %}
+                <article class="card card-accent {{ 'card-accent--danger' if action_valide is sameas false else 'card-accent--warning' }}">
+                    <div class="card-header">
+                        <h3 class="card-title">{{ 'Erreurs de validation' if action_valide is sameas false else 'Points d’attention de la validation' }}</h3>
+                        <span class="badge {{ 'badge-critical' if action_valide is sameas false else 'badge-warning' }}">
+                            {{ 'Validation bloquée' if action_valide is sameas false else 'Confirmation requise' }}
+                        </span>
+                    </div>
+                    <div class="card-body mp-erreur">
+                        <ul>
+                            {% for erreur in erreurs %}<li>{{ erreur }}</li>{% endfor %}
+                        </ul>
+                        <p class="mt-3">
+                            {% if action_valide is sameas false %}
+                            Aucune modification ne peut être appliquée tant que ces points ne sont pas corrigés.
+                            {% else %}
+                            La proposition reste valide : ces avertissements imposent une confirmation explicite, pas un rejet.
                             {% endif %}
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
-
-            <div class="mp-encadre">
-                <h3>Changements envisagés</h3>
-                <ul>
-                    {% for changement in proposition.get('changements', []) %}
-                    <li>{{ changement }}</li>
-                    {% else %}
-                    <li>Aucun changement envisagé.</li>
-                    {% endfor %}
-                </ul>
-            </div>
-
-            <div class="mp-encadre">
-                <h3>Paramètres proposés</h3>
-                {% set parametres = proposition.get('parametres', {}) %}
-                {% if parametres is mapping %}
-                <ul>
-                    {% for cle, valeur in parametres.items() %}
-                    <li><strong>{{ cle }}</strong> : {{ valeur }}</li>
-                    {% endfor %}
-                </ul>
-                {% else %}
-                <p>{{ parametres }}</p>
+                        </p>
+                    </div>
+                </article>
                 {% endif %}
             </div>
 
-            {% if proposition.get('avertissements') %}
-            <div class="mp-encadre">
-                <h3>Avertissements</h3>
-                <ul>
-                    {% for avertissement in proposition.get('avertissements', []) %}
-                    <li>{{ avertissement }}</li>
-                    {% endfor %}
-                </ul>
-            </div>
-            {% endif %}
-
-            {% if erreurs %}
-            <div class="mp-encadre {% if action_valide is sameas false %}mp-erreur{% endif %}">
-                <h3>{{ 'Erreurs de validation' if action_valide is sameas false else 'Points d’attention de la validation' }}</h3>
-                <ul>
-                    {% for erreur in erreurs %}<li>{{ erreur }}</li>{% endfor %}
-                </ul>
-                <p>
-                    {% if action_valide is sameas false %}
-                    Aucune modification ne peut être appliquée tant que ces points ne sont pas corrigés.
-                    {% else %}
-                    La proposition reste valide : ces avertissements imposent une confirmation explicite, pas un rejet.
-                    {% endif %}
-                </p>
-            </div>
-            {% endif %}
-
             {% if proposition.get('destructrice') %}
-            <div class="mp-alerte">
-                <strong>Suppression demandée.</strong> Cette action est destructrice :
-                pour l'appliquer, saisissez <code>SUPPRIMER</code> dans le champ de
-                confirmation (la saisie <code>CONFIRMER</code> est refusée).
+            <div class="alert alert-danger mp-alerte">
+                <div>
+                    <strong>Suppression demandée.</strong> Cette action est destructrice :
+                    pour l'appliquer, saisissez <code>SUPPRIMER</code> dans le champ de
+                    confirmation (la saisie <code>CONFIRMER</code> est refusée).
+                </div>
             </div>
             {% endif %}
 
-            <form class="mp-formulaire" method="post" action="{{ url_for('ia_gestion.action_assistee', project_id=projet.id) }}">
+            <form class="form-card mp-formulaire" method="post" action="{{ url_for('ia_gestion.action_assistee', project_id=projet.id) }}">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" name="etape" value="executer">
                 <input type="hidden" name="texte" value="{{ texte or '' }}">
-                <label for="confirmer-action">
-                    Confirmation — saisissez exactement
-                    {% if proposition.get('destructrice') %}SUPPRIMER{% else %}CONFIRMER{% endif %}
-                </label>
-                <input id="confirmer-action" type="text" name="confirmer" autocomplete="off"
-                       placeholder="{% if proposition.get('destructrice') %}SUPPRIMER{% else %}CONFIRMER{% endif %}">
-                {% if action_valide is sameas true %}
-                <button class="mp-btn {% if proposition.get('destructrice') %}mp-btn-danger{% endif %}" type="submit">
-                    Appliquer l'action confirmée
-                </button>
-                {% endif %}
+                <div class="field">
+                    <label for="confirmer-action">
+                        Confirmation — saisissez exactement
+                        {% if proposition.get('destructrice') %}SUPPRIMER{% else %}CONFIRMER{% endif %}
+                    </label>
+                    <input id="confirmer-action" type="text" name="confirmer" autocomplete="off"
+                           placeholder="{% if proposition.get('destructrice') %}SUPPRIMER{% else %}CONFIRMER{% endif %}">
+                    <span class="field-hint">Aucune modification n'est appliquée à l'étape de prévisualisation.</span>
+                </div>
+                <div class="form-actions actions-bar">
+                    {% if action_valide is sameas true %}
+                    <button class="btn {{ 'btn-danger' if proposition.get('destructrice') else 'btn-primary' }} mp-btn {% if proposition.get('destructrice') %}mp-btn-danger{% endif %}" type="submit">
+                        Appliquer l'action confirmée
+                    </button>
+                    {% endif %}
+                </div>
             </form>
         </section>
         {% else %}
-        <div class="mp-encadre">
+        <div class="empty-state">
             <p>Aucune proposition en cours : saisissez une demande puis cliquez sur « Prévisualiser les changements ».</p>
         </div>
         {% endif %}
 
-        <p>
-            <a class="mp-btn mp-btn-neutre" href="{{ url_for('projects.detail', project_id=projet.id) }}">Retour au détail du projet</a>
-        </p>
+        <div class="actions-bar">
+            <a class="btn btn-secondary mp-btn mp-btn-neutre" href="{{ url_for('projects.detail', project_id=projet.id) }}">Retour au détail du projet</a>
+        </div>
     </main>
+</div>
 </body>
 </html>
