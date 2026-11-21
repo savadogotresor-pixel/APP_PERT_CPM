@@ -22,9 +22,6 @@
             <li><a href="{{ url_for('projects.list_projects') }}">📁 Mes projets</a></li>
             {% if current_user.is_authenticated %}
             <li><a href="{{ url_for('auth.logout') }}">🚪 Déconnexion</a></li>
-            {% else %}
-            <li><a href="{{ url_for('auth.login') }}">🔑 Connexion</a></li>
-            <li><a href="{{ url_for('auth.register') }}">✍️ Inscription</a></li>
             {% endif %}
         </ul>
     </header>
@@ -222,6 +219,7 @@
         <div class="card-body">
         <p><strong>Code :</strong> <span id="fiche-code"></span></p>
         <p><strong>Description :</strong> <span id="fiche-description"></span></p>
+        <p class="field-hint">Aide : la description est le texte libre saisi pour cette tâche ; elle précise le travail à réaliser et apparaît aussi dans le tableau et les exports.</p>
         <p><strong>Durée :</strong> <span id="fiche-duree"></span></p>
         <p><strong>Dates :</strong> <span id="fiche-dates"></span></p>
         <p><strong>Marges :</strong> <span id="fiche-marges"></span></p>

@@ -44,10 +44,12 @@
                     </div>
                 </div>
 
-                <form method="post" action="{{ url_for('auth.register') }}">
+                <form id="form-register" method="post" action="{{ url_for('auth.register') }}">
                     {% if csrf_token is defined %}
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     {% endif %}
+                    <input type="hidden" id="password_chiffre" name="password_chiffre" disabled>
+                    <input type="hidden" id="password_chiffre_confirm" name="password_chiffre_confirm" disabled>
 
                     <div class="form-grid">
                         <div class="champ field">
@@ -85,5 +87,14 @@
         </div>
     </main>
 </div>
+<script src="{{ url_for('static', filename='auth_rsa.js') }}"></script>
+<script>
+    if (window.AuthRSA) {
+        AuthRSA.activer(document.getElementById('form-register'), [
+            { plaintext: 'password', chiffre: 'password_chiffre' },
+            { plaintext: 'password_confirm', chiffre: 'password_chiffre_confirm' }
+        ]);
+    }
+</script>
 </body>
 </html>

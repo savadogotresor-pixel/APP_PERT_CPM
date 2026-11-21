@@ -14,11 +14,11 @@
 
 ```mermaid
 flowchart TB
-    Navigateur["Navigateur (HTML/CSS/JS)<br/>vis-network, frappe-gantt, html2canvas"]
+    Navigateur["Navigateur (HTML/CSS/JS)<br/>vis-network, frappe-gantt, html2canvas, auth_rsa.js"]
     Proxy["Render (TLS, ProxyFix)"]
     WSGI["WSGI — gunicorn app:app"]
     Routes["Couche HTTP<br/>app.py · routes_auth.py · routes_projects.py · routes_admin.py"]
-    Secu["Socle transversal<br/>Flask-Login · Flask-WTF/CSRF · modèles.user_can_access"]
+    Secu["Socle transversal<br/>Flask-Login · Flask-WTF/CSRF · RSA (crypto_rsa.py) · modèles.user_can_access"]
     Services["Services applicatifs<br/>services/import_export.py · optimisation.py · rapport.py"]
     Moteur["Moteur pur (sans Flask)<br/>logic/pert.py · logic/calcul.py · logic/data.py"]
     ORM["ORM Flask-SQLAlchemy<br/>extensions.py · models.py"]
@@ -56,7 +56,8 @@ Lecture du schéma :
 | `config.py` | `Config` (développement), `ProductionConfig` (secrets obligatoires, cookies sûrs), `TestConfig` (SQLite mémoire, CSRF désactivé). Normalise `postgres://` en `postgresql://`. |
 | `extensions.py` | Instances partagées `db` (SQLAlchemy), `login_manager` (Flask-Login), `csrf` (Flask-WTF). |
 | `models.py` | Entités `User`, `Project`, `Task`, `Dependency`, `ProjectAccess`, `Scenario`, `AuditLog` ; hachage des mots de passe ; `project_to_taches()` ; `user_can_access()` ; `init_db()` (`db.create_all()`). |
-| `routes_auth.py` | Blueprint `auth` : inscription, connexion, déconnexion, profil ; validation serveur, messages génériques, filtrage de `next` contre les redirections ouvertes. |
+| `routes_auth.py` | Blueprint `auth` : inscription, connexion, déconnexion, profil, endpoint public `/auth/public-key` ; validation serveur, messages génériques, filtrage de `next` contre les redirections ouvertes, lecture des mots de passe chiffrés ou en clair. |
+| `crypto_rsa.py` | Chiffrement des identifiants : initialisation idempotente de la clé (variable d'environnement ou clé générée en mémoire), PEM SPKI public, déchiffrement RSA-OAEP-SHA256. La clé privée n'est ni exposée ni journalisée. |
 | `routes_projects.py` | Blueprint `projects` (préfixe `/projects`) : CRUD projets/tâches, archivage, import/export, rapport PDF, scénarios d'optimisation, journalisation des actions. |
 | `routes_ia.py` | Blueprint `ia` (préfixe `/ia`) : interface conversationnelle, contrôle d'accès avant construction du contexte, historique de session (20 messages), limitation d'usage, audit `IA_ASSISTANT`, fallback déterministe si le service est absent. |
 | `services/ia.py` | Service IA : `est_disponible()`, `repondre()`, `configuration()` ; clé API côté serveur, timeout, fallback interne et traçabilité des données utilisées. |
@@ -67,7 +68,7 @@ Lecture du schéma :
 | `services/import_export.py` | Import CSV/XLSX avec aperçu et erreurs numérotées ; exports CSV (UTF-8 BOM, `;`) et XLSX (onglet « Résultats »), neutralisation des formules. |
 | `services/optimisation.py` | `simuler()` : deux calculs déterministes (initial et copie modifiée), gains, hypothèses, limites ; aucune écriture en base. |
 | `services/rapport.py` | `generer_rapport_pdf()` : rapport A4 paysage en deux pages, tableau détaillé, réseau PERT et Gantt générés avec matplotlib (`Agg`), texte extractible et échappé. |
-| `templates/`, `static/` | Gabarits Jinja2 (historiques, `auth/`, `projects/`, `admin/`) et feuilles de style. |
+| `templates/`, `static/` | Gabarits Jinja2 (historiques, `auth/`, `projects/`, `admin/`) et feuilles de style ; `static/auth_rsa.js` chiffre le mot de passe dans le navigateur avant soumission. |
 | `tests/` | 86 tests `unittest` : moteur, parseur, HTTP, auth/projets, modèles, import/export, optimisation, rapport PDF. |
 | `scripts/backup.py`, `scripts/restore.py` | Sauvegarde et restauration SQLite (voir `docs/sauvegarde.md`). |
 | `requirements.txt`, `docs/` | Dépendances figées et documentation fonctionnelle/opérationnelle. |
@@ -162,6 +163,7 @@ Relations fonctionnelles :
 | Variable | Valeur par défaut | Rôle |
 |---|---|---|
 | `SECRET_KEY` | `dev-secret-key-a-changer` avec `Config` | Signature des sessions et des jetons CSRF. `ProductionConfig` **exige** la variable et refuse de démarrer si elle manque. |
+| `RSA_PRIVATE_KEY_PEM` | non défini | Clé privée RSA 2048 bits au format PEM utilisée pour déchiffrer les mots de passe. Sans variable, `crypto_rsa.initialiser(app)` génère une clé en mémoire : elle est perdue au redémarrage. À définir en production pour conserver la clé. |
 | `DATABASE_URL` | `sqlite:///pert_cpm.db` | URI SQLAlchemy. Le préfixe `postgres://` fourni par Render est normalisé en `postgresql://`. `TestConfig` force `sqlite:///:memory:`. |
 | `APP_SETTINGS` | `config.Config` | Classe de configuration Python : `config.Config`, `config.ProductionConfig` (recommandé en prod) ou `config.TestConfig`. |
 | `FLASK_DEBUG` | non défini | `1` active le debug et le niveau de journal `DEBUG` en **développement uniquement** ; jamais en production. |
@@ -187,9 +189,10 @@ python -c "from app import app; [print(','.join(sorted(r.methods - {'HEAD','OPTI
 
 ### 5.1 Routes publiques et historiques
 
+`/` n'est plus une route publique : `@login_required` protège l'accueil et redirige un anonyme vers `/login?next=%2F` (voir §5.2). `/demo`, `/saisie`, `/health`, `/resultats_custom` et `/export_excel` restent publics.
+
 | Méthode | Chemin | Description |
 |---|---|---|
-| GET | `/` | Page d'accueil. |
 | GET | `/health` | Supervision : `{"status": "ok"}` (aucune authentification, utilisé par Render). |
 | GET | `/demo` | Démonstration 12 tâches : 30 jours, chemin `A → B → G → H → K → L`. |
 | GET | `/saisie` | Formulaire de saisie texte historique. |
@@ -200,10 +203,13 @@ python -c "from app import app; [print(','.join(sorted(r.methods - {'HEAD','OPTI
 
 | Méthode | Chemin | Accès | Description |
 |---|---|---|---|
+| GET | `/auth/public-key` | public | JSON `{cle_publique, algorithme, champ, format}` avec une clé PEM SPKI ; `Cache-Control: public, max-age=3600`. |
 | GET, POST | `/register` | public | Création de compte ; mot de passe ≥ 8 caractères, confirmé et haché. |
 | GET, POST | `/login` | public | Connexion par nom d'utilisateur ou e-mail ; `next` limité à un chemin local. |
-| GET | `/logout` | connecté | Déconnexion et redirection vers l'accueil. |
+| GET | `/logout` | connecté | Déconnexion et redirection vers `/login`. |
 | GET, POST | `/profile` | connecté | Modification du nom, de l'e-mail et du mot de passe (ancien mot de passe requis). |
+
+L'accueil `/` (route `app.accueil`, définie dans `app.py`) relève du même contrôle : `@login_required` redirige un anonyme vers `/login?next=%2F` (302) ; une fois connecté, l'utilisateur voit un message de bienvenue et la présentation des fonctionnalités. Les liens « Connexion » et « Inscription » ne figurent plus dans la navigation des anonymes : ils sont accessibles depuis la page de connexion.
 
 ### 5.3 Projets et tâches (blueprint `projects`)
 
@@ -333,14 +339,22 @@ La convention temporelle complète (fin exclusive, jours calendaires, marges) es
 |---|---|
 | CSRF | `CSRFProtect` initialisé dans `app.py` ; jetons dans les formulaires Flask-WTF des pages auth/projets/admin. Deux routes historiques (`/resultats_custom`, `/export_excel`) restent **exemptées** : À migrer vers des formulaires tokenisés. |
 | Hachage | `User.set_password()` utilise `werkzeug.security.generate_password_hash()` ; vérification par `check_password_hash()`. Aucun mot de passe en clair, ni en base, ni dans les journaux. Longueur minimale : 8 caractères. |
-| Contrôle d'accès | `@login_required` sur les routes privées ; `_projet_ou_404()` (403) et `_tache_ou_404()` ; `user_can_access()` (propriétaire, admin, `ProjectAccess`) ; `admin_required()` pour `/admin/*` ; message d'erreur de connexion volontairement générique ; `next` restreint aux chemins locaux. |
+| Chiffrement des identifiants | `GET /auth/public-key` expose une clé publique RSA 2048 bits (PEM SPKI). `static/auth_rsa.js` chiffre le mot de passe côté navigateur en RSA-OAEP-SHA256 et le soumet dans `password_chiffre` (`RSA-OAEP-SHA256:<base64url>`) en désactivant le champ en clair. La clé privée reste côté serveur (`crypto_rsa.py`) ; les POST en clair sans champ chiffré restent acceptés pour compatibilité, sans repli clair si le déchiffrement échoue. |
+| Contrôle d'accès | `@login_required` sur les routes privées, y compris l'accueil `/` ; `/demo` et `/saisie` restent publics ; `_projet_ou_404()` (403) et `_tache_ou_404()` ; `user_can_access()` (propriétaire, admin, `ProjectAccess`) ; `admin_required()` pour `/admin/*` ; message d'erreur de connexion volontairement générique ; `next` restreint aux chemins locaux. |
 | En-têtes HTTP | `after_request` ajoute `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`, une CSP (CDN nécessaires aux graphiques) et `Strict-Transport-Security` sur les requêtes sécurisées. `ProxyFix` permet à Flask de reconnaître le TLS terminé par Render. |
 | Sessions | `ProductionConfig` : cookies `Secure`, `HttpOnly`, `SameSite=Lax`, `PREFERRED_URL_SCHEME=https`. Le secret de session est obligatoire en production. |
 | Entrées | `MAX_CONTENT_LENGTH = 8 Mo` ; validation serveur de toutes les données (formulaires, parseur, import) ; requêtes paramétrées via l'ORM ; aperçu et rapport d'erreurs avant import ; neutralisation des formules CSV/XLSX. |
 | Exports et rapports | Chiffres systématiquement recalculés par le moteur ; data URL PNG validées et décodées côté serveur ; valeurs échappées avant injection dans le PDF ; traces techniques jamais renvoyées à l'utilisateur. |
 | Journalisation | `AuditLog` trace créations/modifications/suppressions de projets et tâches, imports, exports, scénarios et changements de rôle. Logs applicatifs sur stdout, exploités depuis le tableau de bord Render. |
 
-Points de vigilance : la limitation des tentatives de connexion prévue au §11 du cahier n'est pas encore implémentée ; le rôle `niveau` de `ProjectAccess` n'est pas encore différencié ; les pages historiques publiques restent accessibles sans session.
+### 8.1 Chiffrement RSA des identifiants (connexion et inscription)
+
+- `crypto_rsa.initialiser(app)` est appelé au démarrage : il lit `RSA_PRIVATE_KEY_PEM` si la variable est définie, sinon génère une clé RSA 2048 bits conservée dans `app.extensions['auth_rsa']` (changement de clé à chaque redémarrage dans ce cas). La clé privée n'est jamais journalisée.
+- `GET /auth/public-key` renvoie `cle_publique` (PEM SPKI contenant `BEGIN PUBLIC KEY`), `algorithme = RSA-OAEP-SHA256`, `champ = password`, `format = RSA-OAEP-SHA256:<base64url>`, avec `Cache-Control: public, max-age=3600`.
+- Le navigateur utilise Web Crypto (`static/auth_rsa.js`) : OAEP avec `MGF1(SHA256)`, `label=None`. Le serveur déchiffre avec la même configuration ; une charge utile invalide (préfixe absent, base64url incorrect, erreur OAEP, taille > 512 caractères) est traitée comme un échec silencieux et donne un message générique (« Identifiants invalides » à la connexion), sans jamais retomber sur le mot de passe en clair.
+- Compatibilité : si le champ chiffré est absent (tests HTTP, clients historiques), le serveur lit le champ `password` tel quel. Si `crypto.subtle`, `fetch` ou la clé publique est indisponible (par exemple hors ligne), le script laisse le formulaire partir en clair ; la protection effective reste TLS en production.
+
+Points de vigilance : la limitation des tentatives de connexion prévue au §11 du cahier n'est pas encore implémentée ; le rôle `niveau` de `ProjectAccess` n'est pas encore différencié ; `/demo` et `/saisie` restent publics sans session, contrairement à l'accueil `/`.
 
 ## 9. Procédure de mise à jour
 

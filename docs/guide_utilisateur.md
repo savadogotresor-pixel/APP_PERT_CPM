@@ -1,28 +1,34 @@
 # Guide utilisateur — Application PERT/CPM (version actuelle)
 
 **Application en ligne :** <https://app-pert-cpm.onrender.com/>  
-**Objet :** ce guide décrit **l'application telle qu'elle existe aujourd'hui**. Les fonctions prévues par le cahier « PRO » (comptes utilisateurs, projets enregistrés, scénarios d'optimisation, assistant IA) ne sont **pas encore disponibles** et ne sont donc pas documentées ici.
+**Objet :** ce guide décrit **l'application telle qu'elle existe aujourd'hui**. Les comptes utilisateurs et les projets enregistrés sont disponibles ; le guide se concentre sur l'accès, la saisie, le calcul et les exports.
 
 ## 1. Périmètre actuel — à savoir avant de commencer
 
-- L'application est **mono-utilisateur** : il n'y a ni inscription ni connexion.
-- **Aucune donnée n'est enregistrée** : si vous actualisez la page ou fermez l'onglet, votre saisie est perdue. Copiez votre texte de tâches si vous souhaitez le garder.
+- L'application propose des **comptes utilisateurs** : l'accueil (`/`) est réservé aux personnes connectées ; la démo (`/demo`) et la saisie libre (`/saisie`) restent publiques.
+- Les projets enregistrés dans « Mes projets » sont **persistants**. La saisie libre sur `/saisie`, elle, n'est pas sauvegardée : si vous actualisez la page, copiez votre texte de tâches pour le garder.
 - Les durées sont exprimées en **jours entiers supérieurs ou égaux à 0**. Une durée de `0` est acceptée : elle correspond à une tâche instantanée (jalon) qui ne consomme aucun jour. Les dates du Gantt sont calculées en ajoutant ces jours à la date de début choisie (jours calendaires).
 - Une seule relation de dépendance est gérée : « la tâche prédécesseur doit être terminée avant que la tâche suivante commence ».
-- Les boutons d'export nécessitent une connexion Internet : les bibliothèques de graphiques et de PDF sont chargées depuis des CDN.
+- Le calcul fonctionne sans connexion Internet ; en revanche, les graphiques interactifs et l'export PDF/Excel chargent des bibliothèques depuis des CDN et peuvent manquer hors ligne.
 
 ## 2. Prise en main
 
 ### 2.1 Accueil
 
-La page d'accueil (`/`) présente la méthode en trois étapes (décrire les tâches, lancer le calcul, visualiser) et deux boutons :
+La page d'accueil (`/`) est **protégée** : sans session, vous êtes redirigé vers `/login?next=%2F`. Après connexion, elle affiche un message de bienvenue, la présentation des fonctionnalités et deux boutons :
 
 - **📊 Découvrir la démo (12 tâches)** : ouvre un projet d'exemple déjà calculé ;
 - **✏️ Saisir vos tâches** : ouvre le formulaire de saisie.
 
-La barre de navigation en haut de page permet de revenir à l'accueil, à la démo ou à la saisie à tout moment.
+La navigation donne accès à l'accueil, à la démo, à la saisie et à « Mes projets ». « Connexion » et « Inscription » ne sont pas des rubriques de navigation : ces actions restent disponibles depuis la page de connexion (lien « Créer un compte »).
 
-### 2.2 Démo (12 tâches)
+### 2.2 Connexion, chiffrement du mot de passe et mode hors ligne
+
+Sur `/login`, saisissez votre nom d'utilisateur ou votre adresse e-mail et votre mot de passe. **En ligne**, le navigateur récupère la clé publique sur `/auth/public-key` et chiffre le mot de passe (RSA-OAEP-SHA256) avant l'envoi dans le champ caché `password_chiffre` ; le serveur détient seul la clé privée. Le mot de passe est ensuite stocké sous forme de hachage.
+
+Si JavaScript, Web Crypto ou la clé publique est indisponible (page ouverte hors ligne, par exemple), le formulaire envoie le mot de passe en clair : le serveur accepte ce format pour compatibilité. Le calcul PERT/CPM reste utilisable hors ligne, mais les graphiques et les exports peuvent ne pas s'afficher sans accès aux CDN.
+
+### 2.3 Démo (12 tâches)
 
 Cliquez sur **📊 Démo (12 tâches)** (`/demo`). Le projet d'exemple contient 12 activités (A à L), de l'analyse des besoins à la préparation de la soutenance.
 
@@ -181,7 +187,9 @@ Les chiffres du classeur ne sont **pas** ceux de la page : `/export_excel` renvo
 | Alerte « Veuillez saisir une date de début valide au format JJ/MM/AAAA. » | Date saisie sous forme `AAAA-MM-JJ` ou incomplète | Utilisez le format `JJ/MM/AAAA` dans le champ visible. |
 | Graphiques absents ou page sans style | CDN bloqués ou hors ligne | Autorisez `cdn.jsdelivr.net`, `unpkg.com` et `cdnjs.cloudflare.com`, puis rechargez. |
 | Export Excel/PDF qui ne télécharge pas | Requête ou capture interrompue | Vérifiez la connexion, réessayez et autorisez les téléchargements pour le site. |
-| Mes tâches disparaissent après actualisation | Aucune persistance dans la version actuelle | Conservez une copie de votre texte ; la sauvegarde est prévue dans l'évolution PRO. |
+| Mes tâches disparaissent après actualisation | Saisie libre non sauvegardée | Conservez une copie de votre texte ou enregistrez le projet dans « Mes projets ». |
+| Redirection vers `/login?next=%2F` en ouvrant l'accueil | L'accueil exige une connexion | Connectez-vous, ou créez un compte depuis la page de connexion. |
+| Connexion impossible alors que les graphiques s'affichent | Clé publique ou Web Crypto indisponible (hors ligne) | Vérifiez la connexion et rechargez ; le formulaire en clair reste accepté. |
 
 ## 7. Lancer l'application en local (facultatif)
 
@@ -194,4 +202,4 @@ pip install -r requirements.txt
 python app.py
 ```
 
-Ouvrez ensuite <http://127.0.0.1:5000>. Le mode debug est désactivé par défaut : définissez `FLASK_DEBUG=1` pour l'activer (développement uniquement). `GET /health` renvoie `{"status": "ok"}` lorsque le serveur fonctionne. Utilisez la version déployée pour un usage courant.
+Ouvrez ensuite <http://127.0.0.1:5000>. L'accueil renvoie vers `/login` : créez un compte via « Créer un compte » si nécessaire. Le mode debug est désactivé par défaut : définissez `FLASK_DEBUG=1` pour l'activer (développement uniquement). `GET /health` renvoie `{"status": "ok"}` lorsque le serveur fonctionne. Utilisez la version déployée pour un usage courant.

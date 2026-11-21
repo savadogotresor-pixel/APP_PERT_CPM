@@ -44,10 +44,13 @@
                     </div>
                 </div>
 
-                <form method="post" action="{{ url_for('auth.profile') }}">
+                <form id="form-profile" method="post" action="{{ url_for('auth.profile') }}">
                     {% if csrf_token is defined %}
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     {% endif %}
+                    <input type="hidden" id="old_password_chiffre" name="old_password_chiffre" disabled>
+                    <input type="hidden" id="new_password_chiffre" name="new_password_chiffre" disabled>
+                    <input type="hidden" id="new_password_confirm_chiffre" name="new_password_confirm_chiffre" disabled>
 
                     <div class="form-grid">
                         <div class="champ field">
@@ -88,5 +91,15 @@
         </div>
     </main>
 </div>
+<script src="{{ url_for('static', filename='auth_rsa.js') }}"></script>
+<script>
+    if (window.AuthRSA) {
+        AuthRSA.activer(document.getElementById('form-profile'), [
+            { plaintext: 'old_password', chiffre: 'old_password_chiffre' },
+            { plaintext: 'new_password', chiffre: 'new_password_chiffre' },
+            { plaintext: 'new_password_confirm', chiffre: 'new_password_confirm_chiffre' }
+        ]);
+    }
+</script>
 </body>
 </html>

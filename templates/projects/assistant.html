@@ -44,7 +44,9 @@
             <li><a href="{{ url_for('accueil') }}">Accueil</a></li>
             <li><a href="{{ url_for('projects.list_projects') }}">Mes projets</a></li>
             <li><a href="{{ url_for('projects.detail', project_id=projet.id) }}">Détail du projet</a></li>
+            {% if current_user.is_authenticated %}
             <li><a href="{{ url_for('auth.logout') }}">Déconnexion</a></li>
+            {% endif %}
         </ul>
     </header>
 

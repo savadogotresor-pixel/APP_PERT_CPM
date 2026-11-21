@@ -4,9 +4,11 @@ Fournit l'inscription, la connexion, la déconnexion et la gestion du profil.
 Les contrôles d'unicité et de mots de passe sont effectués côté serveur.
 """
 
-from flask import Blueprint, render_template, request, redirect, url_for, flash
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.security import check_password_hash
+
+import crypto_rsa
 
 try:
     from werkzeug.routing.exceptions import BuildError
@@ -70,6 +72,44 @@ def _premier_champ(*noms):
     return ''
 
 
+def _mot_de_passe_depuis_formulaire(nom, champ_chiffre):
+    """Lit un mot de passe en déchiffrant la variante RSA si elle est soumise.
+
+    Compatibilité : les tests et les clients historiques POSTent le champ en
+    clair ; si ``champ_chiffre`` est absent, la valeur de ``nom`` est renvoyée
+    telle quelle. Si le champ chiffré est présent, le déchiffrement est
+    obligatoire : un échec renvoie ``None``, sans jamais retomber sur le clair.
+    """
+    if request.form.get(champ_chiffre) is None:
+        return request.form.get(nom)
+    return crypto_rsa.dechiffrer(request.form.get(champ_chiffre))
+
+
+def _premier_mot_de_passe(*paires):
+    """Premier mot de passe non vide parmi des paires (clair, champ chiffré).
+
+    Dès qu'un champ chiffré est soumis, il fait foi : un échec de
+    déchiffrement ne doit jamais retomber sur une valeur en clair.
+    """
+    for nom, champ_chiffre in paires:
+        if request.form.get(champ_chiffre) is not None:
+            return _mot_de_passe_depuis_formulaire(nom, champ_chiffre) or ''
+    return _premier_champ(*(nom for nom, _chiffre in paires))
+
+
+@auth_bp.route('/auth/public-key')
+def public_key():
+    """Expose la clé publique RSA-OAEP-SHA256 au navigateur (endpoint public)."""
+    reponse = jsonify({
+        "cle_publique": crypto_rsa.cle_publique_pem(),
+        "algorithme": "RSA-OAEP-SHA256",
+        "champ": "password",
+        "format": "RSA-OAEP-SHA256:<base64url>",
+    })
+    reponse.headers['Cache-Control'] = 'public, max-age=3600'
+    return reponse
+
+
 def _cible_apres_connexion():
     """Valide le paramètre ``next`` : uniquement un chemin local relatif.
 
@@ -94,8 +134,14 @@ def register():
     email = (request.form.get('email') or '').strip()
 
     if request.method == 'POST':
-        mot_de_passe = request.form.get('password') or ''
-        confirmation = request.form.get('password_confirm') or ''
+        mot_de_passe = (
+            _mot_de_passe_depuis_formulaire('password', 'password_chiffre') or ''
+        )
+        confirmation = (
+            _mot_de_passe_depuis_formulaire(
+                'password_confirm', 'password_chiffre_confirm'
+            ) or ''
+        )
 
         if not username or not email or not mot_de_passe:
             flash("Tous les champs sont obligatoires.", 'error')
@@ -139,7 +185,9 @@ def login():
     ).strip()
 
     if request.method == 'POST':
-        mot_de_passe = request.form.get('password') or ''
+        mot_de_passe = (
+            _mot_de_passe_depuis_formulaire('password', 'password_chiffre') or ''
+        )
         user = None
         if identifiant:
             user = User.query.filter(
@@ -167,7 +215,7 @@ def logout():
     """Déconnexion de l'utilisateur courant."""
     logout_user()
     flash("Vous êtes déconnecté.", 'success')
-    return redirect(_url_sure('accueil', '/'))
+    return redirect(_url_sure('auth.login', '/login'))
 
 
 @auth_bp.route('/profile', methods=['GET', 'POST'])
@@ -186,16 +234,24 @@ def profile():
     if request.method == 'POST':
         username = (username or '').strip()
         email = (email or '').strip()
-        ancien = _premier_champ(
-            'old_password', 'ancien_mot_de_passe',
-            'current_password', 'mot_de_passe_actuel'
+        ancien = _premier_mot_de_passe(
+            ('old_password', 'old_password_chiffre'),
+            ('ancien_mot_de_passe', 'ancien_mot_de_passe_chiffre'),
+            ('current_password', 'current_password_chiffre'),
+            ('mot_de_passe_actuel', 'mot_de_passe_actuel_chiffre'),
         )
-        nouveau = _premier_champ(
-            'new_password', 'nouveau_mot_de_passe', 'password_nouveau', 'password'
+        nouveau = _premier_mot_de_passe(
+            ('new_password', 'new_password_chiffre'),
+            ('nouveau_mot_de_passe', 'nouveau_mot_de_passe_chiffre'),
+            ('password_nouveau', 'password_nouveau_chiffre'),
+            ('password', 'password_chiffre'),
         )
-        confirmation = _premier_champ(
-            'new_password_confirm', 'nouveau_mot_de_passe_confirm',
-            'confirm_password', 'password_confirm', 'confirmation'
+        confirmation = _premier_mot_de_passe(
+            ('new_password_confirm', 'new_password_confirm_chiffre'),
+            ('nouveau_mot_de_passe_confirm', 'nouveau_mot_de_passe_confirm_chiffre'),
+            ('confirm_password', 'confirm_password_chiffre'),
+            ('password_confirm', 'password_chiffre_confirm'),
+            ('confirmation', 'confirmation_chiffre'),
         )
 
         erreur = None

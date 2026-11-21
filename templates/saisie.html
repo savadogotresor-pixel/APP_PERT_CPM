@@ -20,9 +20,6 @@
             <li><a href="{{ url_for('projects.list_projects') }}">📁 Mes projets</a></li>
             {% if current_user.is_authenticated %}
             <li><a href="{{ url_for('auth.logout') }}">🚪 Déconnexion</a></li>
-            {% else %}
-            <li><a href="{{ url_for('auth.login') }}">🔑 Connexion</a></li>
-            <li><a href="{{ url_for('auth.register') }}">✍️ Inscription</a></li>
             {% endif %}
         </ul>
     </header>
@@ -54,8 +51,10 @@
 
             <div class="field mt-4">
                 <label>Tâches :</label>
-                <p class="field-hint">Format : <code>nom;description;durée;dépendances séparées par des virgules</code></p>
-                <p class="field-hint">Exemple : <code>A;Analyse;3;</code> puis <code>B;Conception;4;A</code></p>
+                <p class="field-hint">Format attendu : une tâche par ligne, avec quatre champs séparés par des points-virgules — <code>nom;description;durée;dépendances</code>.</p>
+                <p class="field-hint"><strong>nom</strong> : identifiant court et unique (ex. <code>A</code>) · <strong>description</strong> : travail à réaliser · <strong>durée</strong> : nombre entier de jours · <strong>dépendances</strong> : codes des tâches à terminer avant, séparés par des virgules (laisser vide s'il n'y en a pas).</p>
+                <p class="field-hint">Exemple : <code>A;Analyse;3;</code> puis <code>B;Conception;4;A</code>, et <code>C;Intégration;2;A,B</code> pour deux prédécesseurs.</p>
+                <p class="field-hint">Conseils pour une bonne description : commencez par un verbe d'action (« Rédiger », « Concevoir », « Valider »), précisez le livrable attendu plutôt qu'une activité vague, restez concis (la description apparaît dans le tableau, la fiche tâche et les exports) et évitez le point-virgule, réservé à la séparation des champs.</p>
                 <textarea name="taches" rows="12" cols="60"
                     placeholder="A;Analyse des besoins;3;
  B;Conception BDD;4;A

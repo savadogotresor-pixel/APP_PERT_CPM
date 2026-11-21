@@ -52,8 +52,13 @@
                 </div>
 
                 <div class="field" style="grid-column: 1 / -1;">
-                    <label for="description">Description</label>
-                    <textarea id="description" name="description" placeholder="Ce que fait la tâche…">{{ valeurs.description }}</textarea>
+                    <label for="description">Description de la tâche</label>
+                    <textarea id="description" name="description"
+                              placeholder="Ex. : Livrer la maquette validée du catalogue (portée : pages accueil et catalogue ; résultat : maquette approuvée par le client).">{{ valeurs.description }}</textarea>
+                    <p class="field-hint mp-aide">
+                        Une bonne description précise le livrable attendu, la portée de la
+                        tâche et le résultat qui permet de la considérer comme terminée.
+                    </p>
                 </div>
 
                 <div class="field">

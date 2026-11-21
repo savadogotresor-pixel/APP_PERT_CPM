@@ -123,7 +123,7 @@
             <table class="data-table mp-table">
                 <thead>
                     <tr>
-                        <th>Tâche</th><th>Description</th><th>Durée</th>
+                        <th>Tâche</th><th title="Livrable, portée et résultat attendu de la tâche">Description de la tâche</th><th>Durée</th>
                         <th>ES</th><th>EF</th><th>LS</th><th>LF</th>
                         <th>Marge totale</th><th>Marge libre</th><th>Critique</th>
                     </tr>
@@ -132,7 +132,7 @@
                     {% for code, r in resultats.items() %}
                     <tr {% if r.critique %}class="row-critical mp-critique"{% endif %}>
                         <td><strong>{{ code }}</strong></td>
-                        <td>{{ taches.get(code, {}).get('description', '') }}</td>
+                        <td>{{ taches.get(code, {}).get('description') or 'Description non renseignée' }}</td>
                         <td>{{ taches.get(code, {}).get('duree', 0) }} j</td>
                         <td>{{ r.ES }}</td>
                         <td>{{ r.EF }}</td>
@@ -151,12 +151,13 @@
         {% endif %}
 
         <h2 class="section-title">Liste des tâches</h2>
+        <p class="field-hint mp-aide">La description de chaque tâche précise le livrable attendu, sa portée et le résultat qui permet de la considérer comme terminée.</p>
         {% if taches_triees %}
         <div class="table-wrapper">
             <table class="data-table mp-table">
                 <thead>
                     <tr>
-                        <th>Code</th><th>Description</th><th>Durée</th>
+                        <th>Code</th><th title="Livrable, portée et résultat attendu de la tâche">Description de la tâche</th><th>Durée</th>
                         <th>Dépendances</th><th>Actions</th>
                     </tr>
                 </thead>
@@ -165,7 +166,7 @@
                     {% set infos = taches.get(tache.code, {}) %}
                     <tr>
                         <td><strong>{{ tache.code }}</strong></td>
-                        <td>{{ tache.description or '—' }}</td>
+                        <td>{{ tache.description or 'Description non renseignée' }}</td>
                         <td>{{ tache.duree }} j</td>
                         <td>{{ infos.get('depend_de', [])|join(', ') or '—' }}</td>
                         <td>

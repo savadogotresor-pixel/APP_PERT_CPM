@@ -7,6 +7,7 @@ import sys
 from datetime import date, timedelta
 
 from flask import Flask, jsonify, render_template, request, send_file
+from flask_login import login_required
 from werkzeug.exceptions import HTTPException
 from werkzeug.middleware.proxy_fix import ProxyFix
 from openpyxl import Workbook
@@ -14,6 +15,7 @@ from openpyxl.styles import PatternFill
 from openpyxl.drawing.image import Image as XLImage
 
 from config import Config  # noqa: F401 - rend la configuration explicite à l'import
+import crypto_rsa
 from extensions import db, login_manager, csrf
 from logic.calcul import generer_conseils
 from logic.data import taches, parser_taches
@@ -49,6 +51,9 @@ login_manager.init_app(app)
 login_manager.login_view = 'auth.login'
 login_manager.login_message = 'Veuillez vous connecter pour accéder à cette page.'
 csrf.init_app(app)
+
+# Clé RSA de chiffrement des mots de passe (jamais de clé privée exposée).
+crypto_rsa.initialiser(app)
 
 app.register_blueprint(auth_bp)
 app.register_blueprint(projects_bp)
@@ -212,6 +217,7 @@ def decoder_image_png(data_url, nom_champ):
 
 
 @app.route('/')
+@login_required
 def accueil():
     return render_template('accueil.html')
 

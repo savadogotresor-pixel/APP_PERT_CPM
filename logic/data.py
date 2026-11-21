@@ -11,62 +11,62 @@ _DUREE_ASCII = re.compile(r"^[0-9]+$")
 
 taches = {
     "A": {
-        "description": "Analyse des besoins et cahier des charges",
+        "description": "Analyse des besoins et cahier des charges : recueillir les attentes, cadrer le périmètre et livrer un cahier des charges validé",
         "duree": 3,
         "depend_de": []
     },
     "B": {
-        "description": "Conception de la base de données",
+        "description": "Conception de la base de données : modéliser entités et relations, puis livrer un schéma prêt à implémenter",
         "duree": 4,
         "depend_de": ["A"]
     },
     "C": {
-        "description": "Maquettes UI/UX (wireframes)",
+        "description": "Maquettes UI/UX (wireframes) : dessiner les écrans clés, valider les parcours et livrer des maquettes exploitables",
         "duree": 4,
         "depend_de": ["A"]
     },
     "D": {
-        "description": "Mise en place de l'environnement de développement",
+        "description": "Mise en place de l'environnement de développement : installer les outils et obtenir un environnement opérationnel",
         "duree": 2,
         "depend_de": ["A"]
     },
     "E": {
-        "description": "Développement du système d'authentification",
+        "description": "Développement du système d'authentification : inscription, connexion et profils sécurisés, livrés avec leurs tests",
         "duree": 6,
         "depend_de": ["B", "D"]
     },
     "F": {
-        "description": "Développement du front-end",
+        "description": "Développement du front-end : construire les interfaces et interactions à partir des maquettes validées",
         "duree": 8,
         "depend_de": ["C", "D"]
     },
     "G": {
-        "description": "Développement du back-end (API)",
+        "description": "Développement du back-end (API) : exposer les services et la persistance, contrôler les accès, documenter les endpoints",
         "duree": 10,
         "depend_de": ["B", "D"]
     },
     "H": {
-        "description": "Intégration front-end / back-end",
+        "description": "Intégration front-end / back-end : connecter les interfaces à l'API et valider les parcours complets de bout en bout",
         "duree": 5,
         "depend_de": ["E", "F", "G"]
     },
     "I": {
-        "description": "Tests et corrections",
+        "description": "Tests et corrections : exécuter les scénarios, corriger les anomalies et livrer une version stable vérifiée",
         "duree": 4,
         "depend_de": ["H"]
     },
     "J": {
-        "description": "Déploiement et mise en ligne",
+        "description": "Déploiement et mise en ligne : préparer la production, publier l'application et contrôler son fonctionnement",
         "duree": 2,
         "depend_de": ["I"]
     },
     "K": {
-        "description": "Rédaction du rapport final",
+        "description": "Rédaction du rapport final : consigner les choix, les résultats et les limites dans un document de synthèse",
         "duree": 5,
         "depend_de": ["H"]
     },
     "L": {
-        "description": "Préparation de la soutenance",
+        "description": "Préparation de la soutenance : construire le support, organiser la démonstration et répéter les réponses attendues",
         "duree": 3,
         "depend_de": ["K"]
     }

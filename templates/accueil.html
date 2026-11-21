@@ -27,22 +27,35 @@
             {% endif %}
             {% if current_user.is_authenticated %}
             <li><a href="{{ url_for('auth.logout') }}">🚪 Déconnexion</a></li>
-            {% else %}
-            <li><a href="{{ url_for('auth.login') }}">🔑 Connexion</a></li>
-            <li><a href="{{ url_for('auth.register') }}">✍️ Inscription</a></li>
             {% endif %}
         </ul>
     </header>
 
     <main class="container">
+        {% set nom_utilisateur = current_user.username | default('', true) | trim %}
         <div class="page-header">
             <div>
-                <h1 class="page-title">🚀 PERT/CPM : pilotez vos projets avec précision</h1>
-                <p class="page-subtitle">De la liste de tâches au chemin critique, en quelques clics</p>
+                <h1 class="page-title">👋 Bienvenue, {{ nom_utilisateur if nom_utilisateur else 'cher utilisateur' }} !</h1>
+                <p class="page-subtitle">🚀 PERT/CPM : pilotez vos projets avec précision — de la liste de tâches au chemin critique, en quelques clics</p>
             </div>
         </div>
 
-        <section class="card card-accent card-accent--primary">
+        <div class="stat-grid">
+            <div class="stat-card stat-card--primary">
+                <span class="stat-label">Connecté en tant que :</span>
+                <strong class="stat-value">{{ nom_utilisateur if nom_utilisateur else 'utilisateur' }}</strong>
+            </div>
+            <div class="stat-card stat-card--success">
+                <span class="stat-label">Méthodes combinées :</span>
+                <strong class="stat-value">PERT + CPM</strong>
+            </div>
+            <div class="stat-card stat-card--warning">
+                <span class="stat-label">Votre espace :</span>
+                <strong class="stat-value">Projets persistants</strong>
+            </div>
+        </div>
+
+        <section class="card card-accent card-accent--primary mt-4">
             <div class="card-body">
                 <p>
                     Cette application combine deux méthodes complémentaires de gestion de projet :
@@ -52,26 +65,54 @@
             </div>
         </section>
 
-        <div class="card-grid">
+        <div class="card-grid mt-4">
             <article class="card card-accent card-accent--primary">
                 <div class="card-body">
                     <span class="badge badge-info">1</span>
-                    <h3 class="card-title mt-3">Décrivez vos tâches</h3>
-                    <p>Durées, dépendances et dates de votre projet.</p>
+                    <h3 class="card-title mt-3">Saisie des tâches</h3>
+                    <p>Décrivez chaque tâche avec sa durée en jours et ses dépendances ; une ligne suffit par tâche.</p>
                 </div>
             </article>
             <article class="card card-accent card-accent--success">
                 <div class="card-body">
                     <span class="badge badge-success">2</span>
-                    <h3 class="card-title mt-3">Lancez le calcul</h3>
-                    <p>Dates au plus tôt/tard et marges sont déterminées automatiquement.</p>
+                    <h3 class="card-title mt-3">Calcul du chemin critique</h3>
+                    <p>Dates au plus tôt/tard, marges et durée minimale sont déterminées automatiquement par le CPM.</p>
                 </div>
             </article>
             <article class="card card-accent card-accent--warning">
                 <div class="card-body">
                     <span class="badge badge-warning">3</span>
-                    <h3 class="card-title mt-3">Visualisez le résultat</h3>
-                    <p>Chemin critique mis en évidence sur le Gantt et le graphe PERT.</p>
+                    <h3 class="card-title mt-3">Visualisations</h3>
+                    <p>Graphe PERT interactif et diagramme de Gantt : le chemin critique est mis en évidence en rouge.</p>
+                </div>
+            </article>
+            <article class="card card-accent card-accent--primary">
+                <div class="card-body">
+                    <span class="badge badge-info">4</span>
+                    <h3 class="card-title mt-3">Projets persistants</h3>
+                    <p>Enregistrez vos projets dans « Mes projets » pour retrouver et reprendre votre planning plus tard.</p>
+                </div>
+            </article>
+            <article class="card card-accent card-accent--success">
+                <div class="card-body">
+                    <span class="badge badge-success">5</span>
+                    <h3 class="card-title mt-3">Optimisation</h3>
+                    <p>Indiquez une date de fin souhaitée et recevez des conseils pour raccourcir le planning.</p>
+                </div>
+            </article>
+            <article class="card card-accent card-accent--warning">
+                <div class="card-body">
+                    <span class="badge badge-warning">6</span>
+                    <h3 class="card-title mt-3">Assistant IA</h3>
+                    <p>Faites-vous aider pour rédiger et structurer vos tâches directement depuis votre espace.</p>
+                </div>
+            </article>
+            <article class="card card-accent card-accent--primary">
+                <div class="card-body">
+                    <span class="badge badge-info">7</span>
+                    <h3 class="card-title mt-3">Exports</h3>
+                    <p>Téléchargez vos résultats en PDF ou en Excel, graphiques inclus, pour les partager.</p>
                 </div>
             </article>
         </div>
