@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Comptes utilisateurs — PERT/CPM</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        .admin-page { max-width: 100%; }
+        .admin-subnav { display: flex; gap: 14px; flex-wrap: wrap; margin: 0 0 20px; font-size: .9rem; }
+        .admin-subnav a {
+            background: #e5e7eb; color: #1f2937; padding: 6px 12px;
+            border-radius: 999px; font-weight: 600;
+        }
+        .admin-subnav a:hover { background: #d1d5db; text-decoration: none; }
+        .admin-table-wrapper { overflow-x: auto; }
+        .admin-table { min-width: 760px; }
+        .admin-table td { vertical-align: middle; }
+        .admin-table .admin-date { white-space: nowrap; color: #4b5563; font-size: .85rem; }
+        .admin-badge {
+            display: inline-block; padding: 2px 9px; border-radius: 999px;
+            font-size: .78rem; font-weight: 600;
+        }
+        .admin-badge-oui { background: #dcfce7; color: #166534; }
+        .admin-badge-non { background: #f3f4f6; color: #4b5563; }
+        .admin-inline { display: inline-flex; margin: 0; }
+        .admin-btn {
+            display: inline-block; background: #2563eb; color: #fff !important;
+            padding: 6px 11px; border: 0; border-radius: 6px;
+            font-size: .8rem; font-weight: 600; cursor: pointer; text-decoration: none;
+        }
+        .admin-btn:hover { background: #1d4ed8; text-decoration: none; }
+        .admin-btn-warning { background: #d97706; }
+        .admin-btn-warning:hover { background: #b45309; }
+        .admin-btn:disabled { background: #9ca3af; cursor: not-allowed; }
+        .admin-vide {
+            background: #fff; padding: 24px; border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,.08);
+        }
+        .admin-flash {
+            padding: 10px 14px; border-radius: 6px; margin-bottom: 10px; font-size: .9rem;
+        }
+        .admin-flash-success { background: #d1fae5; color: #065f46; }
+        .admin-flash-error { background: #fee2e2; color: #991b1b; }
+        .admin-flash-info { background: #dbeafe; color: #1e40af; }
+        .admin-flash-warning { background: #fef3c7; color: #92400e; }
+        .admin-note {
+            background: #eff6ff; border-left: 4px solid #2563eb; color: #1e40af;
+            padding: 10px 14px; border-radius: 4px; font-size: .85rem; margin: 16px 0;
+        }
+        .admin-muted { color: #6b7280; font-size: .85rem; }
+    </style>
+</head>
+<body>
+    <nav class="nav admin-page">
+        <a href="{{ url_for('accueil') }}">Accueil</a>
+        <a href="{{ url_for('projects.list_projects') }}">Mes projets</a>
+        <a href="{{ url_for('admin.index') }}">🛠️ Administration</a>
+        <a href="{{ url_for('auth.logout') }}">Déconnexion</a>
+    </nav>
+
+    <main class="admin-page">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for categorie, message in messages %}
+                <div class="admin-flash admin-flash-{{ categorie }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <h1>👥 Gestion des comptes</h1>
+        <p class="admin-muted">Le rôle est vérifié côté serveur à chaque accès à l'administration.</p>
+
+        <div class="admin-subnav">
+            <a href="{{ url_for('admin.index') }}">← Tableau de bord</a>
+            <a href="{{ url_for('admin.journal') }}">📜 Journal d'audit</a>
+        </div>
+
+        <div class="admin-note">
+            Chaque changement de rôle est enregistré dans le journal d'audit.
+            Vous ne pouvez pas retirer votre propre statut administrateur.
+        </div>
+
+        {% if users %}
+        <div class="admin-table-wrapper">
+            <table class="admin-table">
+                <thead>
+                    <tr>
+                        <th>Utilisateur</th>
+                        <th>Adresse e-mail</th>
+                        <th>Administrateur ?</th>
+                        <th>Projets</th>
+                        <th>Créé le</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for utilisateur in users %}
+                    {% set est_soi_meme = utilisateur.id == current_user.id %}
+                    {% set retrait_interdit = est_soi_meme and utilisateur.is_admin %}
+                    <tr>
+                        <td>
+                            <strong>{{ utilisateur.username }}</strong>
+                            {% if est_soi_meme %}<span class="admin-muted">(vous)</span>{% endif %}
+                        </td>
+                        <td>{{ utilisateur.email }}</td>
+                        <td>
+                            <span class="admin-badge admin-badge-{{ 'oui' if utilisateur.is_admin else 'non' }}">
+                                {{ 'Oui' if utilisateur.is_admin else 'Non' }}
+                            </span>
+                        </td>
+                        <td>{{ nb_projets.get(utilisateur.id, 0) }}</td>
+                        <td class="admin-date">{{ utilisateur.created_at.strftime('%d/%m/%Y %H:%M') if utilisateur.created_at else '—' }}</td>
+                        <td>
+                            <form class="admin-inline" method="post"
+                                  action="{{ url_for('admin.toggle_admin', user_id=utilisateur.id) }}">
+                                {% if csrf_token is defined %}
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                {% endif %}
+                                <button class="admin-btn admin-btn-warning" type="submit"
+                                        {% if retrait_interdit %}
+                                        disabled title="Vous ne pouvez pas retirer votre propre statut administrateur"
+                                        {% endif %}>
+                                    {{ 'Retirer admin' if utilisateur.is_admin else 'Donner admin' }}
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="admin-vide">
+            <p>Aucun compte utilisateur n'est enregistré.</p>
+        </div>
+        {% endif %}
+    </main>
+</body>
+</html>

@@ -1,10 +1,14 @@
 import base64
 import binascii
 import io
+import logging
 import os
+import sys
 from datetime import date, timedelta
 
 from flask import Flask, jsonify, render_template, request, send_file
+from werkzeug.exceptions import HTTPException
+from werkzeug.middleware.proxy_fix import ProxyFix
 from openpyxl import Workbook
 from openpyxl.styles import PatternFill
 from openpyxl.drawing.image import Image as XLImage
@@ -23,6 +27,19 @@ app = Flask(__name__)
 app.config.from_object(os.environ.get('APP_SETTINGS', 'config.Config'))
 app.config['MAX_CONTENT_LENGTH'] = 8 * 1024 * 1024
 
+# Render termine TLS en amont : sans ProxyFix, request.is_secure reste faux et
+# les redirections/cookies sécurisés seraient générés en HTTP.
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+
+# Journalisation sur stdout (capturé par Render/gunicorn), sans trace technique
+# renvoyée au visiteur. Le niveau DEBUG reste limité au développement local.
+for _handler in list(app.logger.handlers):
+    app.logger.removeHandler(_handler)
+_handler = logging.StreamHandler(sys.stdout)
+_handler.setFormatter(logging.Formatter('%(asctime)s %(levelname)s %(name)s %(message)s'))
+app.logger.addHandler(_handler)
+app.logger.setLevel(logging.DEBUG if os.getenv('FLASK_DEBUG') == '1' else logging.INFO)
+
 db.init_app(app)
 login_manager.init_app(app)
 login_manager.login_view = 'auth.login'
@@ -31,6 +48,42 @@ csrf.init_app(app)
 
 app.register_blueprint(auth_bp)
 app.register_blueprint(projects_bp)
+
+try:
+    from routes_admin import admin_bp
+except ImportError:
+    # Le blueprint admin peut ne pas encore être livré : le reste de l'app
+    # doit continuer à démarrer (et les tests existants à passer).
+    app.logger.info("routes_admin indisponible : blueprint /admin non enregistré.")
+else:
+    app.register_blueprint(admin_bp)
+
+
+@app.after_request
+def ajouter_en_tetes_securite(response):
+    """En-têtes HTTP de défense en profondeur (§7/§11 du cahier)."""
+    response.headers.setdefault('X-Content-Type-Options', 'nosniff')
+    response.headers.setdefault('X-Frame-Options', 'DENY')
+    response.headers.setdefault('Referrer-Policy', 'strict-origin-when-cross-origin')
+    if request.is_secure:
+        response.headers.setdefault(
+            'Strict-Transport-Security', 'max-age=31536000; includeSubDomains'
+        )
+    # CSP permissive pour les CDN et scripts inline déjà utilisés vis.js,
+    # frappe-gantt, html2canvas, jsPDF, Google Fonts.
+    response.headers.setdefault(
+        'Content-Security-Policy',
+        "default-src 'self'; base-uri 'self'; object-src 'none'; "
+        "frame-ancestors 'none'; "
+        "script-src 'self' 'unsafe-inline' https://unpkg.com "
+        "https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; "
+        "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net "
+        "https://fonts.googleapis.com; "
+        "font-src 'self' data: https://fonts.gstatic.com; "
+        "img-src 'self' data: https: blob:; "
+        "connect-src 'self'; worker-src 'self' blob:"
+    )
+    return response
 
 
 @login_manager.user_loader
@@ -351,6 +404,20 @@ def page_introuvable(erreur):
 
 @app.errorhandler(500)
 def erreur_interne(erreur):
+    return render_template(
+        'erreur.html',
+        erreurs=["Une erreur interne est survenue (500). Veuillez réessayer plus tard."]
+    ), 500
+
+
+@app.errorhandler(Exception)
+def erreur_imprevue(exception):
+    """Journalise la trace côté serveur, renvoie une page générique au client."""
+    if isinstance(exception, HTTPException):
+        return exception
+    if app.config.get('TESTING'):
+        raise exception
+    app.logger.exception("Erreur non gérée : %s", exception)
     return render_template(
         'erreur.html',
         erreurs=["Une erreur interne est survenue (500). Veuillez réessayer plus tard."]

@@ -19,6 +19,46 @@ class Config:
     WTF_CSRF_ENABLED = True
 
 
+class _SecretProduction:
+    """Descriptor : exige une variable d'environnement au moment de sa lecture.
+
+    La validation est volontairement différée : ``config`` doit rester
+    importable en développement et sous les tests, où aucun secret n'est
+    défini. Flask lit les attributs via ``getattr`` dans ``from_object``,
+    donc la configuration de production échoue au démarrage si une variable
+    manque, sans toucher à Config/TestConfig.
+    """
+
+    def __init__(self, variable, normaliser_postgres=False):
+        self.variable = variable
+        self.normaliser_postgres = normaliser_postgres
+
+    def __get__(self, instance, owner):
+        valeur = os.environ.get(self.variable)
+        if not valeur:
+            raise RuntimeError(
+                f"ProductionConfig exige la variable d'environnement "
+                f"{self.variable} (à définir dans Render avant le démarrage)."
+            )
+        if self.normaliser_postgres and valeur.startswith('postgres://'):
+            valeur = 'postgresql://' + valeur[len('postgres://'):]
+        return valeur
+
+
+class ProductionConfig(Config):
+    """Configuration de production : secrets obligatoires et cookies sûrs."""
+
+    SECRET_KEY = _SecretProduction('SECRET_KEY')
+    SQLALCHEMY_DATABASE_URI = _SecretProduction('DATABASE_URL', normaliser_postgres=True)
+    DEBUG = False
+    TESTING = False
+    SESSION_COOKIE_SECURE = True
+    SESSION_COOKIE_HTTPONLY = True
+    SESSION_COOKIE_SAMESITE = 'Lax'
+    PREFERRED_URL_SCHEME = 'https'
+    WTF_CSRF_ENABLED = True
+
+
 class TestConfig(Config):
     TESTING = True
     SQLALCHEMY_DATABASE_URI = 'sqlite:///:memory:'

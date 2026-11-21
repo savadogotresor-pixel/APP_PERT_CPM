@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: app-pert-cpm
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn --bind 0.0.0.0:$PORT --workers 2 --timeout 120 app:app
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: SECRET_KEY
+        sync: false
+      - key: DATABASE_URL
+        sync: false  # variable de type Postgres, valeur fournie dans le dashboard Render
+      - key: APP_SETTINGS
+        value: config.ProductionConfig
+      - key: FLASK_DEBUG
+        value: "false"
+      - key: PYTHON_VERSION
+        value: "3.13.5"

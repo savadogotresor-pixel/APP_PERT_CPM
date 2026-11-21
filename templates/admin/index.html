@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Administration — PERT/CPM</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        .admin-page { max-width: 100%; }
+        .admin-subnav { display: flex; gap: 14px; flex-wrap: wrap; margin: 0 0 20px; font-size: .9rem; }
+        .admin-subnav a {
+            background: #e5e7eb; color: #1f2937; padding: 6px 12px;
+            border-radius: 999px; font-weight: 600;
+        }
+        .admin-subnav a:hover { background: #d1d5db; text-decoration: none; }
+        .admin-cards {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 14px; margin: 18px 0 28px;
+        }
+        .admin-card {
+            background: #fff; border: 1px solid #e5e7eb; border-radius: 10px;
+            padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.08);
+        }
+        .admin-card-valeur { font-size: 1.9rem; font-weight: 700; color: #1e3a8a; line-height: 1.2; }
+        .admin-card-label { font-size: .82rem; color: #6b7280; margin-top: 4px; }
+        .admin-table-wrapper { overflow-x: auto; }
+        .admin-table { min-width: 620px; }
+        .admin-table td { vertical-align: top; }
+        .admin-table .admin-date { white-space: nowrap; color: #4b5563; font-size: .85rem; }
+        .admin-table code { word-break: break-all; white-space: pre-wrap; }
+        .admin-vide {
+            background: #fff; padding: 24px; border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,.08);
+        }
+        .admin-flash {
+            padding: 10px 14px; border-radius: 6px; margin-bottom: 10px; font-size: .9rem;
+        }
+        .admin-flash-success { background: #d1fae5; color: #065f46; }
+        .admin-flash-error { background: #fee2e2; color: #991b1b; }
+        .admin-flash-info { background: #dbeafe; color: #1e40af; }
+        .admin-flash-warning { background: #fef3c7; color: #92400e; }
+        .admin-muted { color: #6b7280; font-size: .85rem; }
+    </style>
+</head>
+<body>
+    <nav class="nav admin-page">
+        <a href="{{ url_for('accueil') }}">Accueil</a>
+        <a href="{{ url_for('projects.list_projects') }}">Mes projets</a>
+        <a href="{{ url_for('admin.index') }}">🛠️ Administration</a>
+        <a href="{{ url_for('auth.logout') }}">Déconnexion</a>
+    </nav>
+
+    <main class="admin-page">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for categorie, message in messages %}
+                <div class="admin-flash admin-flash-{{ categorie }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <h1>🛠️ Administration technique</h1>
+        <p class="admin-muted">Connecté en tant que {{ current_user.username }} · rôle administrateur</p>
+
+        <div class="admin-subnav">
+            <a href="{{ url_for('admin.users') }}">👥 Gérer les comptes</a>
+            <a href="{{ url_for('admin.journal') }}">📜 Consulter le journal d'audit</a>
+        </div>
+
+        <h2>Vue d'ensemble</h2>
+        <div class="admin-cards">
+            <div class="admin-card">
+                <div class="admin-card-valeur">{{ statistiques.utilisateurs }}</div>
+                <div class="admin-card-label">Comptes utilisateurs</div>
+            </div>
+            <div class="admin-card">
+                <div class="admin-card-valeur">{{ statistiques.projets_actifs }}</div>
+                <div class="admin-card-label">Projets actifs</div>
+            </div>
+            <div class="admin-card">
+                <div class="admin-card-valeur">{{ statistiques.projets_archives }}</div>
+                <div class="admin-card-label">Projets archivés</div>
+            </div>
+            <div class="admin-card">
+                <div class="admin-card-valeur">{{ statistiques.taches }}</div>
+                <div class="admin-card-label">Tâches</div>
+            </div>
+            <div class="admin-card">
+                <div class="admin-card-valeur">{{ statistiques.scenarios }}</div>
+                <div class="admin-card-label">Scénarios</div>
+            </div>
+            <div class="admin-card">
+                <div class="admin-card-valeur">{{ statistiques.audits }}</div>
+                <div class="admin-card-label">Entrées d'audit</div>
+            </div>
+        </div>
+
+        <h2>Dernières actions journalisées ({{ limite }})</h2>
+        {% if audits %}
+        <div class="admin-table-wrapper">
+            <table class="admin-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Utilisateur</th>
+                        <th>Action</th>
+                        <th>Détails</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for entree in audits %}
+                    <tr>
+                        <td class="admin-date">{{ entree.created_at.strftime('%d/%m/%Y %H:%M') if entree.created_at else '—' }}</td>
+                        <td>{{ entree.user.username if entree.user else 'Système' }}</td>
+                        <td><code>{{ entree.action or '—' }}</code></td>
+                        <td>{{ entree.details or '—' }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="admin-vide">
+            <p>Aucune action journalisée pour le moment.</p>
+        </div>
+        {% endif %}
+
+        <p class="admin-muted">
+            <a href="{{ url_for('admin.journal') }}">Voir le journal complet →</a>
+        </p>
+    </main>
+</body>
+</html>
