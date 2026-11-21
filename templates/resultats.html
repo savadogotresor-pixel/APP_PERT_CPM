@@ -22,6 +22,7 @@
     {% endif %}
     <p>Durée totale du projet : <strong>{{ duree_totale }} jours</strong></p>
     <p>Chemin critique : <strong>{{ chemin_critique | join(' → ') }}</strong></p>
+    <p>Chemins critiques ({{ chemins_critiques | default([]) | length }}) : <strong>{% for chemin in chemins_critiques | default([]) %}{{ chemin | join(' → ') }}{% if not loop.last %} | {% endif %}{% endfor %}</strong></p>
 
     <div id="contenu-export">
 
@@ -29,7 +30,7 @@
             <tr>
                 <th>Tâche</th><th>Description</th><th>Durée</th>
                 <th>ES</th><th>EF</th><th>LS</th><th>LF</th>
-                <th>Marge</th><th>Critique ?</th>
+                <th>Marge totale</th><th>Marge libre</th><th>Critique ?</th>
             </tr>
             {% for nom, r in resultats.items() %}
             <tr {% if r.critique %}class="ligne-critique"{% endif %}>
@@ -41,12 +42,12 @@
                 <td>{{ r.LS }}</td>
                 <td>{{ r.LF }}</td>
                 <td>{{ r.marge }}</td>
+                <td>{{ r.marge_libre }}</td>
                 <td>{{ "OUI" if r.critique else "Non" }}</td>
             </tr>
             {% endfor %}
         </table>
 
-        {% if not conseils %}
         <details class="aide">
             <summary>ℹ️ Comment sont calculées les dates et la marge (ES, EF, LS, LF) ?</summary>
             <p>
@@ -69,8 +70,13 @@
                 projet et en revenant en arrière (passe arrière).
             </p>
             <p>
-                La <strong>marge</strong> (ou flottement) d'une tâche est le retard qu'elle peut
-                supporter sans décaler la fin du projet : <code>marge = LS − ES = LF − EF</code>.
+                La <strong>marge</strong> (ou marge totale, ou flottement) d'une tâche est le retard
+                qu'elle peut supporter sans décaler la fin du projet :
+                <code>marge = LS − ES = LF − EF</code>.
+            </p>
+            <p>
+                La <strong>marge libre</strong> est le retard maximal que la tâche peut prendre sans
+                décaler le début d'aucune tâche suivante.
             </p>
             <p>
                 Une tâche est dite <strong>critique</strong> lorsque sa marge est égale à
@@ -81,7 +87,6 @@
                 durée minimale du projet.
             </p>
         </details>
-        {% endif %}
 
         {% if conseils %}
         <div class="conseils">
@@ -93,7 +98,6 @@
         {% endif %}
 
         <h2>Graphe PERT</h2>
-        {% if not conseils %}
         <details class="aide">
             <summary>ℹ️ Comment lire ce graphe ?</summary>
             <p>
@@ -104,11 +108,9 @@
                 partie du <strong>chemin critique</strong> sont colorées en rouge, les autres en bleu.
             </p>
         </details>
-        {% endif %}
         <div id="graphe"></div>
 
         <h2>Diagramme de Gantt</h2>
-        {% if not conseils %}
         <details class="aide">
             <summary>ℹ️ Comment ce diagramme a-t-il été construit ?</summary>
             <p>
@@ -122,14 +124,13 @@
                 afficher le détail de ses dates.
             </p>
         </details>
-        {% endif %}
         <div id="gantt-container">
             <svg id="gantt"></svg>
         </div>
 
     </div>
 
-    <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <script src="https://unpkg.com/vis-network@9.1.9/standalone/umd/vis-network.min.js"></script>
     <script>
         const nodes = new vis.DataSet({{ nodes | tojson }});
         const edges = new vis.DataSet({{ edges | tojson }});
@@ -147,6 +148,16 @@
     <script src="https://cdn.jsdelivr.net/npm/frappe-gantt@0.6.1/dist/frappe-gantt.min.js"></script>
     <script>
         const tachesGantt = {{ taches_gantt | tojson }};
+
+        function echapperHtml(texte) {
+            return String(texte)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
         new Gantt("#gantt", tachesGantt, {
             view_mode: 'Day',
             date_format: 'YYYY-MM-DD',
@@ -159,7 +170,7 @@
                 const fin = new Date(task.end);
                 const fmt = d => `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
                 return `<div class="details-container">
-                    <p><strong>${task.name}</strong></p>
+                    <p><strong>${echapperHtml(task.name)}</strong></p>
                     <p>Début : ${fmt(debut)}</p>
                     <p>Fin : ${fmt(fin)}</p>
                 </div>`;
@@ -213,10 +224,8 @@
     <button onclick="exporterExcel()">📊 Télécharger en Excel</button>
 
     <script>
-        const tachesData = {{ taches | tojson }};
-        const resultatsData = {{ resultats | tojson }};
-        const dureeTotale = {{ duree_totale | tojson }};
-        const cheminCritique = {{ chemin_critique | tojson }};
+        const TACHES_TEXTE = {{ taches_texte | tojson }};
+        const DATE_DEBUT_ISO = {{ (date_debut or '') | tojson }};
 
         async function exporterExcel() {
             const grapheCanvas = await html2canvas(document.getElementById('graphe'), { scale: 2 });
@@ -229,14 +238,17 @@
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    taches: tachesData,
-                    resultats: resultatsData,
-                    duree_totale: dureeTotale,
-                    chemin_critique: cheminCritique,
+                    taches_texte: TACHES_TEXTE,
+                    date_debut: DATE_DEBUT_ISO,
                     image_graphe: imageGraphe,
                     image_gantt: imageGantt
                 })
             });
+
+            if (!reponse.ok) {
+                alert("Erreur lors de la génération du fichier Excel.");
+                return;
+            }
 
             const blob = await reponse.blob();
             const url = window.URL.createObjectURL(blob);
@@ -246,6 +258,7 @@
             document.body.appendChild(a);
             a.click();
             a.remove();
+            URL.revokeObjectURL(url);
         }
     </script>
 

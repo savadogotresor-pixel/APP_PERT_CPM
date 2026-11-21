@@ -1,15 +1,42 @@
 import base64
+import binascii
 import io
-import tempfile
+import os
 from datetime import date, timedelta
-from flask import Flask, render_template, request, send_file
+
+from flask import Flask, jsonify, render_template, request, send_file
 from openpyxl import Workbook
 from openpyxl.styles import PatternFill
 from openpyxl.drawing.image import Image as XLImage
+
+from logic.calcul import generer_conseils
 from logic.data import taches, parser_taches
-from logic.calcul import passe_avant, passe_arriere, calculer_marges, liste_chemin_critique, valider_taches, generer_conseils
+from logic.pert import compute, ValidationError
 
 app = Flask(__name__)
+app.config['MAX_CONTENT_LENGTH'] = 8 * 1024 * 1024
+
+PREFIXE_PNG = "data:image/png;base64,"
+PREFIXES_FORMULE = ("=", "+", "-", "@")
+MIME_XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+
+def taches_vers_texte(taches):
+    """Sérialise un graphe de tâches au format attendu par ``parser_taches``."""
+    lignes = []
+    for nom, infos in taches.items():
+        # Un point-virgule ou un saut de ligne dans la description casserait
+        # la syntaxe `nom;description;duree;pred1,pred2` au réassemblage.
+        description = str(infos.get("description", ""))
+        description = description.replace("\r", " ").replace("\n", " ").replace(";", ",")
+        dependances = ",".join(str(p) for p in (infos.get("depend_de") or []) if str(p).strip())
+        lignes.append(f"{nom};{description};{infos.get('duree', 0)};{dependances}")
+    return "\n".join(lignes)
+
+
+def messages_erreurs(exception):
+    """Découpe les messages agrégés par ``ValidationError`` en lignes propres."""
+    return [ligne.strip() for ligne in str(exception).split("\n") if ligne.strip()]
 
 
 def preparer_graphe(taches, resultats):
@@ -48,13 +75,26 @@ def preparer_gantt(taches, resultats, date_debut=None):
     return taches_gantt
 
 
-def decoder_et_sauver_image(image_b64):
-    en_tete, donnees = image_b64.split(',', 1)
-    donnees_binaires = base64.b64decode(donnees)
-    fichier_temp = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
-    fichier_temp.write(donnees_binaires)
-    fichier_temp.close()
-    return fichier_temp.name
+def neutraliser_formules(feuille, numero_ligne):
+    """Force en texte (data_type 's') toute cellule pouvant être une formule."""
+    for cellule in feuille[numero_ligne]:
+        valeur = cellule.value
+        if isinstance(valeur, str) and valeur.startswith(PREFIXES_FORMULE):
+            cellule.data_type = "s"
+
+
+def decoder_image_png(data_url, nom_champ):
+    """Valide une data URL PNG et retourne un flux binaire prêt pour XLImage."""
+    if not isinstance(data_url, str) or not data_url.startswith(PREFIXE_PNG):
+        raise ValueError(f"Le champ '{nom_champ}' doit être une data URL PNG.")
+    donnees = data_url[len(PREFIXE_PNG):]
+    try:
+        octets = base64.b64decode(donnees, validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise ValueError(f"Le champ '{nom_champ}' contient du base64 invalide.") from exc
+    if not octets:
+        raise ValueError(f"Le champ '{nom_champ}' contient une image vide.")
+    return io.BytesIO(octets)
 
 
 @app.route('/')
@@ -62,25 +102,30 @@ def accueil():
     return render_template('accueil.html')
 
 
+@app.route('/health')
+def health():
+    return jsonify({"status": "ok"})
+
+
 @app.route('/demo')
 def demo():
-    av = passe_avant(taches)
-    ar = passe_arriere(taches, av)
-    resultats = calculer_marges(taches, av, ar)
-    chemin_critique = liste_chemin_critique(resultats)
-    duree_totale = max(r["EF"] for r in resultats.values())
-    nodes, edges = preparer_graphe(taches, resultats)
-    taches_gantt = preparer_gantt(taches, resultats)
+    r = compute(taches)
+    chemin_critique = r.chemins_critiques[0] if r.chemins_critiques else []
+    nodes, edges = preparer_graphe(taches, r.resultats)
+    taches_gantt = preparer_gantt(taches, r.resultats)
     return render_template(
         'resultats.html',
         taches=taches,
-        resultats=resultats,
+        resultats=r.resultats,
         chemin_critique=chemin_critique,
-        duree_totale=duree_totale,
+        chemins_critiques=r.chemins_critiques,
+        duree_totale=r.duree_totale,
         nodes=nodes,
         edges=edges,
         taches_gantt=taches_gantt,
-        date_debut=None
+        date_debut=None,
+        conseils=[],
+        taches_texte=taches_vers_texte(taches)
     )
 
 
@@ -91,7 +136,7 @@ def saisie():
 
 @app.route('/resultats_custom', methods=['POST'])
 def resultats_custom():
-    texte = request.form['taches']
+    texte = request.form.get('taches', '')
     date_debut_str = request.form.get('date_debut', '').strip()
     date_fin_str = request.form.get('date_fin_cible', '').strip()
 
@@ -105,16 +150,20 @@ def resultats_custom():
 
     if not taches_custom and not erreurs:
         erreurs.append("Aucune tâche saisie.")
+
+    r = None
     if not erreurs:
-        erreurs += valider_taches(taches_custom)
+        try:
+            r = compute(taches_custom)
+        except ValidationError as exc:
+            erreurs.extend(messages_erreurs(exc))
+
     if erreurs:
         return render_template('erreur.html', erreurs=erreurs)
 
-    av = passe_avant(taches_custom)
-    ar = passe_arriere(taches_custom, av)
-    resultats = calculer_marges(taches_custom, av, ar)
-    chemin_critique = liste_chemin_critique(resultats)
-    duree_totale = max(r["EF"] for r in resultats.values())
+    resultats = r.resultats
+    chemin_critique = r.chemins_critiques[0] if r.chemins_critiques else []
+
     nodes, edges = preparer_graphe(taches_custom, resultats)
     taches_gantt = preparer_gantt(taches_custom, resultats, date_debut_obj)
 
@@ -129,7 +178,7 @@ def resultats_custom():
             pass
 
     conseils = generer_conseils(
-        taches_custom, resultats, chemin_critique, duree_totale,
+        taches_custom, resultats, chemin_critique, r.duree_totale,
         date_debut=date_debut_obj, date_fin_cible=date_fin_obj
     )
 
@@ -138,59 +187,143 @@ def resultats_custom():
         taches=taches_custom,
         resultats=resultats,
         chemin_critique=chemin_critique,
-        duree_totale=duree_totale,
+        chemins_critiques=r.chemins_critiques,
+        duree_totale=r.duree_totale,
         nodes=nodes,
         edges=edges,
         taches_gantt=taches_gantt,
         date_debut=date_debut_str,
         date_fin=date_fin_affichage,
-        conseils=conseils
+        conseils=conseils,
+        taches_texte=texte
     )
 
 
 @app.route('/export_excel', methods=['POST'])
 def export_excel():
-    data = request.get_json()
-    taches_data = data['taches']
-    resultats_data = data['resultats']
-    duree_totale = data['duree_totale']
-    chemin_critique = data['chemin_critique']
+    """Export sécurisé : tous les chiffres sont recalculés côté serveur."""
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        return jsonify({"erreur": "Corps JSON invalide ou manquant."}), 400
+
+    taches_texte = payload.get("taches_texte")
+    date_debut_str = payload.get("date_debut", "")
+    image_graphe = payload.get("image_graphe")
+    image_gantt = payload.get("image_gantt")
+
+    if not isinstance(taches_texte, str) or not taches_texte.strip():
+        return jsonify({"erreur": "Le champ 'taches_texte' doit être une chaîne non vide."}), 400
+    if not isinstance(date_debut_str, str):
+        return jsonify({"erreur": "Le champ 'date_debut' doit être une chaîne."}), 400
+    if date_debut_str:
+        try:
+            date.fromisoformat(date_debut_str)
+        except ValueError:
+            return jsonify({
+                "erreur": "Le champ 'date_debut' doit être une date ISO (AAAA-MM-JJ) ou vide."
+            }), 400
+    for nom_champ, valeur in (("image_graphe", image_graphe), ("image_gantt", image_gantt)):
+        if not isinstance(valeur, str) or not valeur.startswith(PREFIXE_PNG):
+            return jsonify({
+                "erreur": f"Le champ '{nom_champ}' doit être une data URL PNG."
+            }), 400
+
+    taches_export, erreurs = parser_taches(taches_texte)
+    if not taches_export and not erreurs:
+        erreurs.append("Aucune tâche saisie.")
+    if erreurs:
+        return jsonify({
+            "erreur": "La saisie des tâches est invalide.",
+            "details": erreurs
+        }), 400
+
+    try:
+        r = compute(taches_export)
+    except ValidationError as exc:
+        return jsonify({
+            "erreur": "Le graphe de tâches est invalide.",
+            "details": messages_erreurs(exc)
+        }), 400
+
+    try:
+        flux_graphe = decoder_image_png(image_graphe, "image_graphe")
+        flux_gantt = decoder_image_png(image_gantt, "image_gantt")
+    except ValueError as exc:
+        return jsonify({"erreur": str(exc)}), 400
 
     wb = Workbook()
     ws = wb.active
     ws.title = "Résultats"
-    ws.append(["Tâche", "Description", "Durée", "ES", "EF", "LS", "LF", "Marge", "Critique"])
+    ws.append([
+        "Tâche", "Description", "Durée", "ES", "EF", "LS", "LF",
+        "Marge totale", "Marge libre", "Critique"
+    ])
+    neutraliser_formules(ws, ws.max_row)
     rouge = PatternFill(start_color="FFCCCC", end_color="FFCCCC", fill_type="solid")
 
-    for nom, r in resultats_data.items():
-        infos = taches_data[nom]
-        ws.append([nom, infos["description"], infos["duree"],
-                   r["ES"], r["EF"], r["LS"], r["LF"], r["marge"],
-                   "OUI" if r["critique"] else "Non"])
-        if r["critique"]:
-            for cell in ws[ws.max_row]:
-                cell.fill = rouge
+    for nom, resultat in r.resultats.items():
+        infos = taches_export[nom]
+        ws.append([
+            nom, infos["description"], infos["duree"],
+            resultat["ES"], resultat["EF"], resultat["LS"], resultat["LF"],
+            resultat["marge_totale"], resultat["marge_libre"],
+            "OUI" if resultat["critique"] else "Non"
+        ])
+        ligne = ws.max_row
+        neutraliser_formules(ws, ligne)
+        if resultat["critique"]:
+            for cellule in ws[ligne]:
+                cellule.fill = rouge
 
     ws.append([])
-    ws.append([f"Durée totale du projet : {duree_totale} jours"])
-    ws.append([f"Chemin critique : {' -> '.join(chemin_critique)}"])
+    ws.append([f"Durée totale du projet : {r.duree_totale} jours"])
+    neutraliser_formules(ws, ws.max_row)
+    chemins = " | ".join(" → ".join(chemin) for chemin in r.chemins_critiques)
+    ws.append([f"Chemins critiques : {chemins}"])
+    neutraliser_formules(ws, ws.max_row)
 
-    ws_graphe = wb.create_sheet("Graphe PERT")
-    ws_graphe.add_image(XLImage(decoder_et_sauver_image(data['image_graphe'])), "A1")
+    try:
+        ws_graphe = wb.create_sheet("Graphe PERT")
+        ws_graphe.add_image(XLImage(flux_graphe), "A1")
+        ws_gantt = wb.create_sheet("Diagramme Gantt")
+        ws_gantt.add_image(XLImage(flux_gantt), "A1")
+    except Exception:
+        return jsonify({"erreur": "Les images PNG fournies sont illisibles."}), 400
 
-    ws_gantt = wb.create_sheet("Diagramme Gantt")
-    ws_gantt.add_image(XLImage(decoder_et_sauver_image(data['image_gantt'])), "A1")
-
-    sortie = io.BytesIO()
-    wb.save(sortie)
+    try:
+        sortie = io.BytesIO()
+        wb.save(sortie)
+    except Exception:
+        return jsonify({"erreur": "Impossible de générer le classeur Excel."}), 400
     sortie.seek(0)
     return send_file(
         sortie,
-        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        mimetype=MIME_XLSX,
         as_attachment=True,
         download_name="resultats_pert_cpm.xlsx"
     )
 
 
+@app.errorhandler(413)
+def requete_trop_volumineuse(erreur):
+    # MAX_CONTENT_LENGTH : un payload trop gros est un payload invalide.
+    return jsonify({
+        "erreur": "La requête dépasse la taille maximale autorisée (8 Mo)."
+    }), 400
+
+
+@app.errorhandler(404)
+def page_introuvable(erreur):
+    return render_template('erreur.html', erreurs=["La page demandée n'existe pas (404)."]), 404
+
+
+@app.errorhandler(500)
+def erreur_interne(erreur):
+    return render_template(
+        'erreur.html',
+        erreurs=["Une erreur interne est survenue (500). Veuillez réessayer plus tard."]
+    ), 500
+
+
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=os.getenv("FLASK_DEBUG") == "1")

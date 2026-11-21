@@ -1,3 +1,14 @@
+import re
+
+
+# Protections contre une saisie accidentellement (ou volontairement) énorme.
+MAX_CARACTERES = 100_000
+MAX_LIGNES = 2_000
+
+# Seuls les chiffres ASCII sont acceptés : "²".isdigit() est vrai mais int("²") échoue.
+_DUREE_ASCII = re.compile(r"^[0-9]+$")
+
+
 taches = {
     "A": {
         "description": "Analyse des besoins et cahier des charges",
@@ -67,21 +78,62 @@ if __name__ == '__main__':
 
 def parser_taches(texte):
     """
-    Retourne un tuple (taches_custom, erreurs) :
-    - taches_custom : dictionnaire des tâches valides
-    - erreurs : liste de messages d'erreur (vide si tout est OK)
+    Analyse une saisie de tâches et retourne ``(taches_custom, erreurs)``.
+
+    Format accepté, une tâche par ligne ::
+
+        nom;description;durée[;pred1,pred2]
+        nom;description;durée;pred1;pred2
+
+    Les deux séparateurs de prédécesseurs sont acceptés : la virgule
+    (``A;Analyse;3;B,C``) et le point-virgule, qui produit alors des champs
+    supplémentaires (``A;Analyse;3;B;C``). Une ligne sans prédécesseur peut
+    s'écrire ``A;Analyse;3`` ou ``A;Analyse;3;`` (champ 4 volontairement vide).
+    Les lignes vides sont ignorées ; les noms sont nettoyés et doivent être
+    uniques ; la description est facultative ; les prédécesseurs sont nettoyés.
+
+    La durée doit être un entier décimal ASCII (regex ``^[0-9]+$``), donc ni
+    négative, ni décimale, ni un chiffre non ASCII comme ``²``. Les durées
+    nulles sont acceptées : convention documentée, une tâche de durée 0 est
+    un jalon qui ne bloque pas le calcul. C'est une information, pas une
+    erreur : aucun message d'erreur n'est ajouté dans ce cas afin de ne pas
+    empêcher le calcul PERT/CPM.
+
+    Toutes les erreurs sont accumulées avec leur numéro de ligne (les lignes
+    vides comptent dans la numérotation). La taille de la saisie est limitée
+    pour éviter un traitement démesuré.
     """
     taches_custom = {}
     erreurs = []
 
-    for i, ligne in enumerate(texte.strip().split('\n'), start=1):
+    if not isinstance(texte, str):
+        return taches_custom, [
+            "Ligne 1 : la saisie doit être une chaîne de caractères "
+            f"(type reçu : {type(texte).__name__})"
+        ]
+
+    if len(texte) > MAX_CARACTERES:
+        return taches_custom, [
+            f"Ligne 1 : saisie trop longue ({len(texte)} caractères, "
+            f"maximum {MAX_CARACTERES} caractères)"
+        ]
+
+    lignes = texte.splitlines()
+    if len(lignes) > MAX_LIGNES:
+        return taches_custom, [
+            f"Ligne {MAX_LIGNES + 1} : trop de lignes ({len(lignes)}, "
+            f"maximum {MAX_LIGNES})"
+        ]
+
+    for i, ligne in enumerate(lignes, start=1):
         if not ligne.strip():
             continue
 
+        contenu = ligne.strip()
         parts = ligne.split(';')
 
         if len(parts) < 3:
-            erreurs.append(f"Ligne {i} : format invalide, il faut au moins nom;description;durée → \"{ligne.strip()}\"")
+            erreurs.append(f"Ligne {i} : format invalide, il faut au moins nom;description;durée → \"{contenu}\"")
             continue
 
         nom = parts[0].strip()
@@ -96,16 +148,42 @@ def parser_taches(texte):
             erreurs.append(f"Ligne {i} : la tâche \"{nom}\" est définie plusieurs fois")
             continue
 
-        if not duree_str.isdigit():
-            erreurs.append(f"Ligne {i} (tâche \"{nom}\") : durée manquante ou invalide (\"{duree_str}\")")
+        if not duree_str:
+            erreurs.append(f"Ligne {i} (tâche \"{nom}\") : durée manquante")
+            continue
+
+        if duree_str.startswith('-') and _DUREE_ASCII.fullmatch(duree_str[1:]):
+            erreurs.append(
+                f"Ligne {i} (tâche \"{nom}\") : durée négative interdite "
+                f"(\"{duree_str}\")"
+            )
+            continue
+
+        if not _DUREE_ASCII.fullmatch(duree_str):
+            erreurs.append(
+                f"Ligne {i} (tâche \"{nom}\") : durée invalide (\"{duree_str}\") "
+                ": un entier décimal (zéro ou plus) est attendu"
+            )
             continue
 
         duree = int(duree_str)
 
-        if len(parts) > 3 and parts[3].strip():
-            depend_de = [d.strip() for d in parts[3].split(',') if d.strip()]
-        else:
-            depend_de = []
+        depend_de = []
+        for index, champ in enumerate(parts[3:], start=4):
+            valeur = champ.strip()
+            if not valeur:
+                # `A;Analyse;3;` : champ 4 vide et aucun autre champ = pas de prédécesseur.
+                if index == 4 and len(parts) == 4:
+                    continue
+                erreurs.append(
+                    f"Ligne {i} (tâche \"{nom}\") : champ {index} vide inattendu "
+                    "après la durée"
+                )
+                continue
+            for dep in valeur.split(','):
+                dep = dep.strip()
+                if dep:
+                    depend_de.append(dep)
 
         taches_custom[nom] = {
             "description": description,
