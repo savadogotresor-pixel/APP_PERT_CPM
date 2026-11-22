@@ -11,7 +11,7 @@ import re
 import unittest
 import uuid
 from http.cookies import SimpleCookie
-from urllib.parse import unquote, urlsplit
+from urllib.parse import parse_qs, unquote, urlsplit
 
 from sqlalchemy import create_engine
 
@@ -86,6 +86,12 @@ class AuthRedirectsTestCase(unittest.TestCase):
         if nom not in cookies:
             return None
         return unquote(cookies[nom].value)
+
+    def _verifier_redirection_login(self, reponse, destination):
+        emplacement = reponse.headers.get('Location', '')
+        morceaux = urlsplit(emplacement)
+        self.assertEqual('/login', morceaux.path, msg=emplacement)
+        self.assertEqual([destination], parse_qs(morceaux.query).get('next'))
 
     @staticmethod
     def _nav(html):
@@ -255,9 +261,43 @@ class AuthRedirectsTestCase(unittest.TestCase):
         self.assertIn(username, self._html(accueil))
 
     # ------------------------------------------------------------------
-    # 7. Navigation épurée sur les pages publiques
+    # 7. Navigation : Catalogue réservé aux utilisateurs connectés
     # ------------------------------------------------------------------
-    def test_navigation_sans_liens_demo_et_saisie(self):
+    def test_navigation_anonyme_sans_catalogue_sur_login_et_register(self):
+        for chemin in ('/login', '/register'):
+            with self.subTest(chemin=chemin):
+                reponse = self.client.get(chemin)
+                self.assertEqual(
+                    200, reponse.status_code, msg=self._html(reponse)[:2000]
+                )
+                nav = self._nav(self._html(reponse))
+                self.assertNotIn('Catalogue', nav)
+                self.assertNotIn('Démo', nav)
+                self.assertNotIn('Saisie', nav)
+
+    def test_catalogue_anonyme_redirige_vers_login(self):
+        reponse = self.client.get('/catalogue/')
+        self.assertEqual(302, reponse.status_code)
+        self._verifier_redirection_login(reponse, '/catalogue/')
+
+    def test_demo_anonyme_sans_lien_catalogue(self):
+        reponse = self.client.get('/demo')
+        if reponse.status_code == 302:
+            # Si la démo est protégée, vérifier seulement la redirection :
+            # il n'y a pas de navigation à tester sur une telle réponse.
+            self._verifier_redirection_login(reponse, '/demo')
+            return
+        # Tant que /demo reste public, aucun lien Catalogue n'est affiché.
+        self.assertEqual(200, reponse.status_code, msg=self._html(reponse)[:2000])
+        self.assertNotIn('Catalogue', self._nav(self._html(reponse)))
+
+    def test_navigation_connecte_affiche_catalogue(self):
+        username, _email = self._creer_utilisateur()
+        connexion = self.client.post(
+            '/login', data=self._donnees_connexion(username)
+        )
+        self.assertEqual(302, connexion.status_code)
+
         for chemin in ('/login', '/register', '/catalogue/', '/demo'):
             with self.subTest(chemin=chemin):
                 reponse = self.client.get(chemin)
@@ -266,8 +306,6 @@ class AuthRedirectsTestCase(unittest.TestCase):
                 )
                 nav = self._nav(self._html(reponse))
                 self.assertIn('Catalogue', nav)
-                self.assertNotIn('Démo (12 tâches)', nav)
-                self.assertNotIn('Saisie des tâches', nav)
 
 
 if __name__ == '__main__':

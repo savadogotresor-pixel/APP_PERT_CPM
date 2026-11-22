@@ -111,8 +111,8 @@
     <header class="topbar">
         <a class="topbar-brand" href="{{ url_for('accueil') }}"><span class="topbar-brand-icon">📊</span> PERT/CPM</a>
         <ul class="topbar-nav">
-            <li><a href="/catalogue/">🧰 Catalogue</a></li>
             {% if current_user.is_authenticated %}
+            <li><a href="/catalogue/">🧰 Catalogue</a></li>
             <li><a href="{{ url_for('accueil') }}">🏠 Accueil</a></li>
             <li><a href="{{ url_for('projects.list_projects') }}">📁 Mes projets</a></li>
             <li><a href="{{ url_for('auth.profile') }}">👤 Profil</a></li>

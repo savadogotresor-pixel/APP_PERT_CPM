@@ -15,8 +15,8 @@
         <ul class="topbar-nav">
             {% if current_user.is_authenticated %}
             <li><a href="/">🏠 Accueil</a></li>
-            {% endif %}
             <li><a href="{{ url_for('catalogue.index') }}">🧰 Catalogue</a></li>
+            {% endif %}
             {% if current_user.is_authenticated %}
             <li><a href="{{ url_for('auth.profile') }}">👤 Mon compte</a></li>
             <li><a href="{{ url_for('projects.list_projects') }}">📁 Mes projets</a></li>

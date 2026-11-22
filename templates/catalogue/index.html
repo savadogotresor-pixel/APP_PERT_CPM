@@ -26,8 +26,8 @@
     <header class="topbar">
         <a class="topbar-brand" href="{{ accueil_url }}"><span class="topbar-brand-icon">📊</span> PERT/CPM</a>
         <ul class="topbar-nav">
-            <li><a href="{{ url_for('catalogue.index') }}" aria-current="page">🧰 Catalogue</a></li>
             {% if current_user.is_authenticated %}
+            <li><a href="{{ url_for('catalogue.index') }}" aria-current="page">🧰 Catalogue</a></li>
             <li><a href="{{ accueil_url }}">Accueil</a></li>
             <li><a href="{{ mes_projets_url }}">Mes projets</a></li>
             <li><a href="{{ profil_url }}">Profil</a></li>

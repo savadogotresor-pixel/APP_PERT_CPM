@@ -189,7 +189,7 @@ python -c "from app import app; [print(','.join(sorted(r.methods - {'HEAD','OPTI
 
 ### 5.1 Routes publiques et historiques
 
-`/` n'est plus une route publique : `@login_required` protège l'accueil et redirige un anonyme vers `/login?next=%2F` (voir §5.2). `/demo`, `/saisie`, `/health`, `/resultats_custom` et `/export_excel` restent publics.
+`/` n'est plus une route publique : `@login_required` protège l'accueil et redirige un anonyme vers `/login?next=%2F` (voir §5.2). Le catalogue (`/catalogue/...`, §20.1) est également réservé aux utilisateurs connectés : un anonyme est redirigé vers `/login?next=%2Fcatalogue%2F`, ou vers la fiche demandée. `/demo`, `/saisie`, `/health`, `/resultats_custom` et `/export_excel` restent publics.
 
 | Méthode | Chemin | Description |
 |---|---|---|
@@ -340,7 +340,7 @@ La convention temporelle complète (fin exclusive, jours calendaires, marges) es
 | CSRF | `CSRFProtect` initialisé dans `app.py` ; jetons dans les formulaires Flask-WTF des pages auth/projets/admin. Deux routes historiques (`/resultats_custom`, `/export_excel`) restent **exemptées** : À migrer vers des formulaires tokenisés. |
 | Hachage | `User.set_password()` utilise `werkzeug.security.generate_password_hash()` ; vérification par `check_password_hash()`. Aucun mot de passe en clair, ni en base, ni dans les journaux. Longueur minimale : 8 caractères. |
 | Chiffrement des identifiants | `GET /auth/public-key` expose une clé publique RSA 2048 bits (PEM SPKI). `static/auth_rsa.js` chiffre le mot de passe côté navigateur en RSA-OAEP-SHA256 et le soumet dans `password_chiffre` (`RSA-OAEP-SHA256:<base64url>`) en désactivant le champ en clair. La clé privée reste côté serveur (`crypto_rsa.py`) ; les POST en clair sans champ chiffré restent acceptés pour compatibilité, sans repli clair si le déchiffrement échoue. |
-| Contrôle d'accès | `@login_required` sur les routes privées, y compris l'accueil `/` ; `/demo` et `/saisie` restent publics ; `_projet_ou_404()` (403) et `_tache_ou_404()` ; `user_can_access()` (propriétaire, admin, `ProjectAccess`) ; `admin_required()` pour `/admin/*` ; message d'erreur de connexion volontairement générique ; `next` restreint aux chemins locaux. |
+| Contrôle d'accès | `@login_required` sur les routes privées, y compris l'accueil `/` et tout le catalogue `/catalogue/*` (consultation et optimisation) ; `/demo` et `/saisie` restent publics ; `_projet_ou_404()` (403) et `_tache_ou_404()` ; `user_can_access()` (propriétaire, admin, `ProjectAccess`) ; `admin_required()` pour `/admin/*` ; message d'erreur de connexion volontairement générique ; `next` restreint aux chemins locaux. |
 | En-têtes HTTP | `after_request` ajoute `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`, une CSP (CDN nécessaires aux graphiques) et `Strict-Transport-Security` sur les requêtes sécurisées. `ProxyFix` permet à Flask de reconnaître le TLS terminé par Render. |
 | Sessions | `ProductionConfig` : cookies `Secure`, `HttpOnly`, `SameSite=Lax`, `PREFERRED_URL_SCHEME=https`. Le secret de session est obligatoire en production. |
 | Entrées | `MAX_CONTENT_LENGTH = 8 Mo` ; validation serveur de toutes les données (formulaires, parseur, import) ; requêtes paramétrées via l'ORM ; aperçu et rapport d'erreurs avant import ; neutralisation des formules CSV/XLSX. |
@@ -354,7 +354,7 @@ La convention temporelle complète (fin exclusive, jours calendaires, marges) es
 - Le navigateur utilise Web Crypto (`static/auth_rsa.js`) : OAEP avec `MGF1(SHA256)`, `label=None`. Le serveur déchiffre avec la même configuration ; une charge utile invalide (préfixe absent, base64url incorrect, erreur OAEP, taille > 512 caractères) est traitée comme un échec silencieux et donne un message générique (« Identifiants invalides » à la connexion), sans jamais retomber sur le mot de passe en clair.
 - Compatibilité : si le champ chiffré est absent (tests HTTP, clients historiques), le serveur lit le champ `password` tel quel. Si `crypto.subtle`, `fetch` ou la clé publique est indisponible (par exemple hors ligne), le script laisse le formulaire partir en clair ; la protection effective reste TLS en production.
 
-Points de vigilance : la limitation des tentatives de connexion prévue au §11 du cahier n'est pas encore implémentée ; le rôle `niveau` de `ProjectAccess` n'est pas encore différencié ; `/demo` et `/saisie` restent publics sans session, contrairement à l'accueil `/`.
+Points de vigilance : la limitation des tentatives de connexion prévue au §11 du cahier n'est pas encore implémentée ; le rôle `niveau` de `ProjectAccess` n'est pas encore différencié ; `/demo` et `/saisie` restent publics sans session, contrairement à l'accueil `/` et au catalogue `/catalogue/*`.
 
 ## 9. Procédure de mise à jour
 
@@ -423,13 +423,15 @@ Le blueprint `catalogue` (`routes_catalogue.py`, préfixe `/catalogue`) expose :
 
 | Méthode | Chemin | Accès | Comportement |
 |---|---|---|---|
-| GET | `/catalogue/` | public | Liste des 12 projets avec durée calculée par `compute` et statistiques (nombre de projets, de catégories, durée moyenne). |
-| GET | `/catalogue/<projet_id>` | public | Fiche : résumé, tableau PERT et chemin critique recalculés ; 404 pour un identifiant inconnu. |
+| GET | `/catalogue/` | connecté | Liste des 12 projets avec durée calculée par `compute` et statistiques (nombre de projets, de catégories, durée moyenne). |
+| GET | `/catalogue/<projet_id>` | connecté | Fiche : résumé, tableau PERT et chemin critique recalculés ; 404 pour un identifiant inconnu. |
 | POST | `/catalogue/<projet_id>/optimiser` | connecté | Bouton « 🚀 Optimiser ce projet » : copie du modèle dans le compte courant puis ouverture de la simulation. |
 
-La copie est créée par `catalogue_logic.optimiser(user_id)` : `Project`, `Task` et `Dependency` sont inscrits en base **avec les durées d'origine**, sans optimisation numérique ; un `AuditLog(action='CATALOGUE_OPTIMISE')` est ajouté si le journal est disponible. La redirection mène à `projects.optimisation` pour simuler des réductions ; le planning de référence n'est pas modifié sans action explicite. Le POST exige `login_required` et le jeton CSRF global.
+Les trois routes portent `@login_required` : un anonyme est redirigé (302) vers `/login?next=%2Fcatalogue%2F`, ou vers `/login?next=%2Fcatalogue%2F<projet_id>` pour une fiche. Le lien **🧰 Catalogue** n'apparaît dans la navigation qu'une fois connecté ; les liens **Démo** et **Saisie** en ont été retirés.
 
-Dans la barre de navigation, les liens **Démo** et **Saisie** ont été retirés et le lien **🧰 Catalogue** ajouté. `/demo` et `/saisie` restent joignables (bouton de l'accueil, lien « Voir la démo » du catalogue ou URL directe).
+La copie est créée par `catalogue_logic.optimiser(projet_id, user_id)` : `Project`, `Task` et `Dependency` sont inscrits en base **dans le compte de l'utilisateur connecté avec les durées d'origine**, sans optimisation numérique ; un `AuditLog(action='CATALOGUE_OPTIMISE')` est ajouté si le journal est disponible. La redirection mène à `projects.optimisation` pour simuler des réductions ; le planning de référence n'est pas modifié sans action explicite. Le POST exige `login_required` et le jeton CSRF global.
+
+`/demo` et `/saisie` restent joignables par URL directe (et depuis les boutons de l'accueil), mais aucun lien vers ces pages ni vers le catalogue n'est affiché dans la navigation d'un anonyme.
 
 ### 20.2 Conseils IA maison automatiques
 
@@ -447,4 +449,12 @@ L'historique est propre à cette discussion : 20 messages maximum par projet dan
 
 ### 20.4 « Se souvenir de moi »
 
-Les cases `remember` des gabarits `auth/login.html` et `auth/register.html` sont lues par `routes_auth.py` : `login_user(user, remember=bool(request.form.get('remember')))` est appelé aussi bien à la **connexion** (`/login`) qu'à la **création de compte** (`/register`). Lorsque la case est cochée, Flask-Login pose le cookie persistant `remember_token` ; la déconnexion (`/logout`) le supprime. Aucune durée spécifique n'est configurée dans `config.py` : c'est le réglage par défaut de Flask-Login qui s'applique.
+Les cases `remember` des gabarits `auth/login.html` et `auth/register.html` sont lues par `routes_auth.py` : `login_user(user, remember=bool(request.form.get('remember')))` est appelé aussi bien à la **connexion** (`/login`) qu'à la **création de compte** (`/register`). Lorsque la case est cochée, Flask-Login pose le cookie persistant `remember_token` ; la déconnexion (`/logout`) le supprime. `REMEMBER_COOKIE_DURATION = timedelta(days=30)` est configuré dans `config.py` : le cookie vit **30 jours**, est renouvelé à chaque requête, `HttpOnly`, `SameSite=Lax` et `Secure` en production.
+
+### 20.5 Vérification de l'e-mail à l'inscription
+
+`models.User` porte `email_verifie`, `code_verification_hash`, `code_verification_expire` et `tentatives_code` ; `init_db()` ajoute ces colonnes de façon idempotente aux bases existantes, avec `DEFAULT TRUE` sur `email_verifie` pour ne pas bloquer les comptes historiques. Le code à 6 chiffres est généré par `secrets`, stocké uniquement en HMAC-SHA256 (`SECRET_KEY`) et comparé avec `hmac.compare_digest`. Il expire après 15 minutes, 5 essais sont autorisés et le renvoi est limité à une fois par minute. `services/mail.py` envoie le message via `smtplib` (stdlib) ; sans `MAIL_SERVER`, l'inscription reste possible et le code est affiché une seule fois en flash puis consigné côté serveur. `EMAIL_VERIFICATION_ENABLED` est actif par défaut en production, désactivé dans `TestConfig`, et peut être forcé à `0` par variable d'environnement.
+
+### 20.6 Visualisations avancées
+
+`static/graphiques.js` génère cinq graphiques SVG natifs sans dépendance externe : histogrammes des durées et des marges totales, donut de criticité, nuage de points durée/marge et barres ES/EF/LS/LF. `DONNEES_GRAPHiques` est injecté depuis `templates/resultats.html` via `tojson` à partir de `taches`, `resultats` et `chemins_critiques` ; l'API `window.Graphiques.generer(nom)` / `genererTous()` pilote la génération à la demande. Les huit blocs `<script>` historiques sont inchangés ; `static/graphiques.css` est chargé avant `design.css`, qui reste le dernier `<link>`.

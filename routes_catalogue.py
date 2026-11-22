@@ -1,8 +1,8 @@
-"""Catalogue public de projets PERT/CPM.
+"""Catalogue de projets PERT/CPM réservé aux utilisateurs connectés.
 
-Les fiches sont consultables sans compte. L'import dans l'espace personnel
-passe par une route POST protégée par Flask-Login et par la protection CSRF
-globale de l'application.
+La consultation des modèles et l'import dans l'espace personnel sont protégés
+par Flask-Login ; l'import est en plus couvert par la protection CSRF globale
+de l'application.
 """
 
 from __future__ import annotations
@@ -48,8 +48,9 @@ def urls_navigation():
 
 
 @catalogue_bp.route('/')
+@login_required
 def index():
-    """Liste publique des modèles de projets, avec leur durée calculée."""
+    """Liste des modèles de projets, avec leur durée calculée."""
     projets = catalogue_logic.CATALOGUE
     plannings = {projet['id']: compute(projet['taches']) for projet in projets}
     durees = [planning.duree_totale for planning in plannings.values()]
@@ -64,8 +65,9 @@ def index():
 
 
 @catalogue_bp.route('/<projet_id>')
+@login_required
 def detail(projet_id):
-    """Fiche publique d'un projet : tableau PERT et chemin critique."""
+    """Fiche d'un projet : tableau PERT et chemin critique."""
     projet = catalogue_logic.get_projet(projet_id)
     if projet is None:
         abort(404)

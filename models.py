@@ -1,6 +1,6 @@
 """Modèles de données et règles d'accès pour l'application PERT/CPM."""
 
-from sqlalchemy import func
+from sqlalchemy import func, inspect, true
 
 from flask_login import UserMixin
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -17,6 +17,20 @@ class User(UserMixin, db.Model):
     password_hash = db.Column(db.String(255), nullable=False)
     created_at = db.Column(db.DateTime, server_default=func.now())
     is_admin = db.Column(db.Boolean, default=False, nullable=False)
+
+    # Vérification e-mail. ``server_default=true()`` est indispensable : les
+    # comptes déjà présents en production doivent rester connectables après la
+    # migration (ils sont réputés vérifiés). Les nouveaux comptes reçoivent
+    # ``False`` via le défaut Python tant que le code n'est pas validé.
+    email_verifie = db.Column(
+        db.Boolean, default=False, nullable=False, server_default=true()
+    )
+    # Uniquement le hash HMAC-SHA256 du code : jamais le code en clair en base.
+    code_verification_hash = db.Column(db.String(255), nullable=True)
+    code_verification_expire = db.Column(db.DateTime, nullable=True)
+    tentatives_code = db.Column(
+        db.Integer, default=0, nullable=False, server_default=db.text('0')
+    )
 
     projects = db.relationship(
         'Project',
@@ -251,7 +265,46 @@ def user_can_access(project, user):
     return owner is not None and owner is user
 
 
+def _migrer_colonnes_verification(engine):
+    """Ajoute, si elles manquent, les colonnes de vérification à ``user``.
+
+    Idempotente : chaque colonne est inspectée avant l'``ALTER TABLE``. Le
+    dialecte SQLAlchemy compile les types (SQLite et PostgreSQL) et le
+    ``DEFAULT TRUE`` garantit que les utilisateurs existants restent vérifiés,
+    donc connectables, après le déploiement.
+    """
+    colonnes_existantes = {
+        colonne['name'] for colonne in inspect(engine).get_columns('user')
+    }
+    dialecte = engine.dialect
+    definitions = (
+        (
+            'email_verifie',
+            '{} NOT NULL DEFAULT {}'.format(
+                db.Boolean().compile(dialect=dialecte),
+                true().compile(dialect=dialecte),
+            ),
+        ),
+        ('code_verification_hash', db.String(255).compile(dialect=dialecte)),
+        ('code_verification_expire', db.DateTime().compile(dialect=dialecte)),
+        (
+            'tentatives_code',
+            '{} NOT NULL DEFAULT 0'.format(
+                db.Integer().compile(dialect=dialecte)
+            ),
+        ),
+    )
+    for nom, definition in definitions:
+        if nom in colonnes_existantes:
+            continue
+        with engine.begin() as connexion:
+            connexion.execute(db.text(
+                f'ALTER TABLE "user" ADD COLUMN "{nom}" {definition}'
+            ))
+
+
 def init_db(app):
-    """Crée les tables dans le contexte applicatif Flask."""
+    """Crée les tables puis migre la table ``user`` si nécessaire."""
     with app.app_context():
         db.create_all()
+        _migrer_colonnes_verification(db.engine)

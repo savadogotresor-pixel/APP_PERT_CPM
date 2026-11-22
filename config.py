@@ -37,6 +37,22 @@ class Config:
     IA_ENABLED = os.environ.get('IA_ENABLED', '1') != '0'
     IA_MAX_APPELS_PAR_HEURE = int(os.environ.get('IA_MAX_APPELS_PAR_HEURE', '60'))
 
+    # Vérification de l'adresse e-mail (code à 6 chiffres, valable 15 minutes).
+    # En développement, la vérification reste désactivée par défaut : on
+    # l'active explicitement avec EMAIL_VERIFICATION_ENABLED=1.
+    EMAIL_VERIFICATION_ENABLED = os.environ.get('EMAIL_VERIFICATION_ENABLED', '0') == '1'
+
+    # SMTP : aucune dépendance externe, uniquement smtplib/email de la stdlib.
+    # Sans MAIL_SERVER, le code est affiché une fois dans un flash (dev uniquement).
+    MAIL_SERVER = os.environ.get('MAIL_SERVER', '')
+    MAIL_PORT = int(os.environ.get('MAIL_PORT', '587'))
+    MAIL_USERNAME = os.environ.get('MAIL_USERNAME', '')
+    MAIL_PASSWORD = os.environ.get('MAIL_PASSWORD', '')
+    MAIL_USE_TLS = os.environ.get('MAIL_USE_TLS', '1') != '0'
+    MAIL_DEFAULT_SENDER = os.environ.get(
+        'MAIL_DEFAULT_SENDER', 'PERT/CPM <no-reply@pert-cpm.local>'
+    )
+
 
 class _SecretProduction:
     """Descriptor : exige une variable d'environnement au moment de sa lecture.
@@ -78,6 +94,8 @@ class ProductionConfig(Config):
     REMEMBER_COOKIE_SAMESITE = 'Lax'
     PREFERRED_URL_SCHEME = 'https'
     WTF_CSRF_ENABLED = True
+    # Activée en production, désactivable avec EMAIL_VERIFICATION_ENABLED=0.
+    EMAIL_VERIFICATION_ENABLED = os.environ.get('EMAIL_VERIFICATION_ENABLED', '1') != '0'
 
 
 class TestConfig(Config):
@@ -85,3 +103,5 @@ class TestConfig(Config):
     SQLALCHEMY_DATABASE_URI = 'sqlite:///:memory:'
     WTF_CSRF_ENABLED = False
     SECRET_KEY = 'test'
+    # La suite historique conserve son comportement : connexion directe.
+    EMAIL_VERIFICATION_ENABLED = False

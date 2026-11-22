@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Vérification de l'e-mail — PERT/CPM</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        /* Spécifique à la page : la carte de vérification reste compacte. */
+        .auth-wrapper { max-width: 460px; margin: 0 auto; }
+        .code-verification { letter-spacing: .35em; text-align: center; font-size: 1.25rem; }
+    </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='design.css') }}">
+</head>
+<body>
+<div class="app-shell">
+    <header class="topbar">
+        <a class="topbar-brand" href="{{ url_for('accueil') }}"><span class="topbar-brand-icon">📊</span> PERT/CPM</a>
+        <ul class="topbar-nav">
+            {% if current_user.is_authenticated %}
+            <li><a href="{{ url_for('accueil') }}">Accueil</a></li>
+            <li><a href="{{ url_for('auth.profile') }}">Profil</a></li>
+            <li><a href="{{ projects_url|default('/projets', true) }}">Mes projets</a></li>
+            <li><a href="{{ url_for('auth.logout') }}">Déconnexion</a></li>
+            {% endif %}
+        </ul>
+    </header>
+
+    <main class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="flashes">
+                    {% for categorie, message in messages %}
+                        {% set classe_alerte = {'error': 'alert-danger', 'success': 'alert-success', 'warning': 'alert-warning'}.get(categorie, 'alert-info') %}
+                        <div class="flash flash-{{ categorie }} alert {{ classe_alerte }}">{{ message }}</div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+
+        <div class="auth-wrapper">
+            <div class="auth-card form-card">
+                <div class="page-header">
+                    <div>
+                        <h1 class="page-title">Vérifier votre adresse e-mail</h1>
+                        <p class="page-subtitle">
+                            Saisissez le code à 6 chiffres envoyé à
+                            <strong>{{ email|default('', true) }}</strong> pour activer votre compte.
+                        </p>
+                        <p class="astuce field-hint">
+                            Le code est valable 15 minutes. Vous avez
+                            {{ tentatives_restantes|default(5, true) }} tentative(s) restante(s).
+                        </p>
+                    </div>
+                </div>
+
+                <form id="form-verify" method="post" action="{{ url_for('auth.verify') }}">
+                    {% if csrf_token is defined %}
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    {% endif %}
+                    <div class="form-grid">
+                        <div class="champ field">
+                            <label for="code">Code de vérification</label>
+                            <input type="text" id="code" name="code" inputmode="numeric"
+                                   pattern="[0-9]{6}" maxlength="6" minlength="6"
+                                   autocomplete="one-time-code" required autofocus
+                                   class="code-verification" placeholder="000000">
+                            <p class="astuce field-hint">6 chiffres, sans espace.</p>
+                        </div>
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn-auth btn btn-primary">Valider le code</button>
+                    </div>
+                </form>
+
+                <form id="form-renvoyer" method="post" action="{{ url_for('auth.renvoyer_code') }}">
+                    {% if csrf_token is defined %}
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    {% endif %}
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn-secondary">
+                            Renvoyer le code
+                        </button>
+                    </div>
+                    <p class="astuce field-hint">
+                        Un nouveau code peut être demandé toutes les
+                        {{ delai_renvoi|default(60, true) }} secondes.
+                    </p>
+                </form>
+
+                <p class="auth-lien mt-3">
+                    Besoin de vous connecter avec un autre compte ?
+                    <a href="{{ url_for('auth.login') }}">Retour à la connexion</a>
+                </p>
+            </div>
+        </div>
+    </main>
+</div>
+</body>
+</html>

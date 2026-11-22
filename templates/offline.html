@@ -15,7 +15,9 @@
     <header class="topbar">
         <a class="topbar-brand" href="/"><span class="topbar-brand-icon">📊</span> PERT/CPM</a>
         <ul class="topbar-nav">
+            {% if current_user.is_authenticated %}
             <li><a href="{{ url_for('catalogue.index') }}">🧰 Catalogue</a></li>
+            {% endif %}
             {% if not current_user.is_authenticated %}
             <li><a href="{{ url_for('auth.login') }}">🔑 Connexion</a></li>
             <li><a href="{{ url_for('auth.register') }}">📝 Inscription</a></li>

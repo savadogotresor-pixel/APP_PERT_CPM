@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='resultats.css') }}">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/frappe-gantt@0.6.1/dist/frappe-gantt.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='graphiques.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='design.css') }}">
 </head>
 <body>
@@ -17,8 +18,8 @@
         <ul class="topbar-nav">
             {% if current_user.is_authenticated %}
             <li><a href="/">🏠 Accueil</a></li>
-            {% endif %}
             <li><a href="{{ url_for('catalogue.index') }}">🧰 Catalogue</a></li>
+            {% endif %}
             {% if current_user.is_authenticated %}
             <li><a href="{{ url_for('auth.profile') }}">👤 Mon compte</a></li>
             <li><a href="{{ url_for('projects.list_projects') }}">📁 Mes projets</a></li>
@@ -195,6 +196,46 @@
         </section>
 
     </div>
+
+    <section id="visualisations-avancees" class="card graphiques-section" aria-labelledby="graphiques-titre">
+        <div class="card-header">
+            <h2 id="graphiques-titre" class="card-title section-title">📈 Representations avancées</h2>
+        </div>
+        <div class="card-body">
+            <p class="graphiques-intro">
+                Choisissez les représentations à afficher, puis générez-les. Toutes les valeurs
+                proviennent du calcul PERT/CPM : aucune donnée n'est recalculée dans le navigateur.
+            </p>
+            <div class="graphiques-controles" role="group" aria-label="Sélection des graphiques à générer">
+                <div class="checkbox-field">
+                    <input type="checkbox" id="graphique-durees" data-graphique="durees" value="durees" checked>
+                    <label for="graphique-durees">Histogramme des durées de tâches</label>
+                </div>
+                <div class="checkbox-field">
+                    <input type="checkbox" id="graphique-marges" data-graphique="marges" value="marges" checked>
+                    <label for="graphique-marges">Histogramme des marges totales</label>
+                </div>
+                <div class="checkbox-field">
+                    <input type="checkbox" id="graphique-criticite" data-graphique="criticite" value="criticite" checked>
+                    <label for="graphique-criticite">Répartition critiques / non critiques (donut)</label>
+                </div>
+                <div class="checkbox-field">
+                    <input type="checkbox" id="graphique-nuage" data-graphique="nuage" value="nuage" checked>
+                    <label for="graphique-nuage">Nuage de points durée vs marge totale</label>
+                </div>
+                <div class="checkbox-field">
+                    <input type="checkbox" id="graphique-calendrier" data-graphique="calendrier" value="calendrier" checked>
+                    <label for="graphique-calendrier">Barres ES / EF / LS / LF par tâche</label>
+                </div>
+            </div>
+            <div class="actions-bar graphiques-actions">
+                <button id="btn-generer-graphiques" class="btn btn-primary" type="button" onclick="Graphiques.genererTous()" aria-controls="graphiques-resultats">📈 Générer les visualisations</button>
+            </div>
+            <div id="graphiques-resultats" class="graphiques-grid" aria-live="polite">
+                <p id="graphiques-invite" class="graphiques-invite">Cochez les graphiques souhaités, puis cliquez sur « Générer les visualisations ».</p>
+            </div>
+        </div>
+    </section>
 
     {# Données construites ici pour la fiche tâche et la mise en évidence des arcs critiques #}
     {% set fiches_taches = {} %}
@@ -449,6 +490,13 @@
             URL.revokeObjectURL(url);
         }
     </script>
+
+    {# Données des visualisations avancées : une seule source, le moteur PERT/CPM. #}
+    <script>
+        const DONNEES_GRAPHiques = {{ {'taches': taches, 'resultats': resultats, 'chemins': chemins_critiques}|tojson }};
+        window.DONNEES_GRAPHiques = DONNEES_GRAPHiques;
+    </script>
+    <script src="{{ url_for('static', filename='graphiques.js') }}"></script>
 
     </main>
 </div>

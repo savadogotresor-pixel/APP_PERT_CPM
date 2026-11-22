@@ -1,0 +1,237 @@
+/* ==========================================================================
+   graphiques.css — Visualisations avancées générées dans le navigateur
+   --------------------------------------------------------------------------
+   Styles de la refonte indigo : cartes, ombres douces, grille responsive.
+   Périmètre volontaire : ce fichier ne cible QUE les classes `graphiques-*`
+   et le bouton dédié. Les zones historiques de resultats.css ne sont pas
+   touchées. Chargé avant design.css, qui reste la dernière feuille.
+   ========================================================================== */
+
+.graphiques-section {
+  --gq-indigo: #4f46e5;
+  --gq-indigo-dark: #3730a3;
+  --gq-indigo-soft: #eef2ff;
+  --gq-texte: #0f172a;
+  --gq-muted: #64748b;
+  --gq-bordure: #e2e8f0;
+  margin-top: var(--space-5, 1.5rem);
+  border-color: #c7d2fe;
+}
+
+.graphiques-section .card-header {
+  background:
+    radial-gradient(circle at 92% 0%, rgba(79, 70, 229, 0.12), transparent 55%),
+    linear-gradient(135deg, #ffffff, var(--gq-indigo-soft));
+}
+
+.graphiques-intro {
+  max-width: 70ch;
+  margin-bottom: var(--space-4, 1rem);
+  color: var(--gq-muted);
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+/* ---------- Contrôles (cases à cocher + bouton) ---------- */
+
+.graphiques-controles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--space-2, 0.5rem) var(--space-4, 1rem);
+  margin-bottom: var(--space-4, 1rem);
+  padding: var(--space-3, 0.75rem) var(--space-4, 1rem);
+  border: 1px solid var(--gq-bordure);
+  border-radius: var(--radius-sm, 8px);
+  background: var(--surface-alt, #f8fafc);
+}
+
+.graphiques-controles .checkbox-field {
+  align-items: center;
+  margin-bottom: 0;
+  padding: 0.3rem 0;
+  font-size: 0.86rem;
+}
+
+.graphiques-controles .checkbox-field input[type='checkbox'] {
+  width: 1.05rem;
+  height: 1.05rem;
+  margin-top: 0;
+  accent-color: var(--gq-indigo);
+}
+
+.graphiques-controles .checkbox-field label {
+  color: var(--gq-texte);
+  cursor: pointer;
+}
+
+.graphiques-actions {
+  margin-bottom: var(--space-4, 1rem);
+}
+
+#btn-generer-graphiques {
+  border-color: var(--gq-indigo);
+  background: var(--gq-indigo);
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(79, 70, 229, 0.28);
+}
+
+#btn-generer-graphiques:hover {
+  border-color: var(--gq-indigo-dark);
+  background: var(--gq-indigo-dark);
+  color: #ffffff;
+}
+
+/* ---------- Grille de résultats ---------- */
+
+.graphiques-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4, 1rem);
+  align-items: start;
+}
+
+.graphiques-invite[hidden] {
+  display: none;
+}
+
+.graphiques-invite {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: var(--space-5, 1.5rem);
+  border: 1px dashed #c7d2fe;
+  border-radius: var(--radius, 12px);
+  background: var(--gq-indigo-soft);
+  color: var(--gq-indigo-dark);
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+.graphique-carte {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--gq-bordure);
+  border-radius: var(--radius, 12px);
+  background: var(--surface, #ffffff);
+  box-shadow: var(--shadow, 0 4px 12px -6px rgba(15, 23, 42, 0.14));
+  animation: graphique-apparition 0.32s ease-out both;
+}
+
+.graphique-carte-titre {
+  margin: 0;
+  padding: var(--space-3, 0.75rem) var(--space-4, 1rem);
+  border-bottom: 1px solid var(--gq-bordure);
+  background: linear-gradient(180deg, #ffffff, var(--surface-alt, #f8fafc));
+  color: var(--gq-indigo-dark);
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.graphique-carte-corps {
+  padding: var(--space-3, 0.75rem);
+}
+
+.graphique-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 360px;
+  overflow: visible;
+}
+
+.graphique-svg text {
+  fill: var(--gq-muted);
+  font-family: var(--font-sans, inherit);
+  font-size: 11px;
+}
+
+.graphique-svg .graphique-titre-axe {
+  fill: var(--gq-indigo-dark);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.graphique-svg .graphique-legende-texte {
+  fill: var(--gq-texte);
+  font-size: 11px;
+}
+
+.graphique-svg .graphique-valeur {
+  fill: var(--gq-indigo-dark);
+  font-size: 10px;
+}
+
+.graphique-vide {
+  min-height: 180px;
+  display: grid;
+  place-content: center;
+  padding: var(--space-4, 1rem);
+  border: 1px dashed #c7d2fe;
+  border-radius: var(--radius-sm, 8px);
+  background: var(--gq-indigo-soft);
+  color: var(--gq-indigo-dark);
+  font-size: 0.9rem;
+  font-style: italic;
+  text-align: center;
+}
+
+@keyframes graphique-apparition {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ---------- Responsive ---------- */
+
+@media (max-width: 900px) {
+  .graphiques-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .graphiques-controles {
+    grid-template-columns: 1fr;
+    padding: var(--space-3, 0.75rem);
+  }
+
+  .graphique-carte-corps {
+    padding: var(--space-2, 0.5rem);
+  }
+
+  .graphique-svg {
+    /* Les libellés restent lisibles : le SVG défile horizontalement. */
+    min-width: 460px;
+  }
+
+  .graphique-carte-corps {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .graphique-carte {
+    animation: none;
+  }
+
+  #btn-generer-graphiques {
+    transition: none;
+  }
+}
+
+@media print {
+  .graphiques-controles,
+  .graphiques-actions {
+    display: none !important;
+  }
+
+  .graphiques-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .graphique-carte {
+    animation: none;
+    box-shadow: none;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+}

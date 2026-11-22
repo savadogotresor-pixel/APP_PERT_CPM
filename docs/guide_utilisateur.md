@@ -5,7 +5,7 @@
 
 ## 1. Périmètre actuel — à savoir avant de commencer
 
-- L'application propose des **comptes utilisateurs** : l'accueil (`/`) est réservé aux personnes connectées ; la démo (`/demo`) et la saisie libre (`/saisie`) restent publiques.
+- L'application propose des **comptes utilisateurs** : l'accueil (`/`) et le catalogue (**🧰 Catalogue**, `/catalogue/`) sont réservés aux personnes connectées ; la démo (`/demo`) et la saisie libre (`/saisie`) restent accessibles par URL directe.
 - Les projets enregistrés dans « Mes projets » sont **persistants**. La saisie libre sur `/saisie`, elle, n'est pas sauvegardée : si vous actualisez la page, copiez votre texte de tâches pour le garder.
 - Les durées sont exprimées en **jours entiers supérieurs ou égaux à 0**. Une durée de `0` est acceptée : elle correspond à une tâche instantanée (jalon) qui ne consomme aucun jour. Les dates du Gantt sont calculées en ajoutant ces jours à la date de début choisie (jours calendaires).
 - Une seule relation de dépendance est gérée : « la tâche prédécesseur doit être terminée avant que la tâche suivante commence ».
@@ -20,7 +20,7 @@ La page d'accueil (`/`) est **protégée** : sans session, vous êtes redirigé 
 - **📊 Découvrir la démo (12 tâches)** : ouvre un projet d'exemple déjà calculé ;
 - **✏️ Saisir vos tâches** : ouvre le formulaire de saisie.
 
-La barre de navigation donne accès à **🧰 Catalogue** (et, une fois connecté, à l'accueil, « Mes projets », l'assistant IA et le profil). Les liens **Démo** et **Saisie** n'y figurent plus : la démo reste accessible depuis le bouton de l'accueil et le catalogue ; la saisie depuis le bouton de l'accueil ou l'URL `/saisie`. « Connexion » et « Inscription » ne sont pas des rubriques de navigation : ces actions restent disponibles depuis la page de connexion (lien « Créer un compte »).
+Une fois connecté, la barre de navigation donne accès à **🧰 Catalogue**, à l'accueil, à « Mes projets », à l'assistant IA et au profil. Avant connexion, ni **Catalogue**, ni **Démo**, ni **Saisie** n'y figurent. La démo reste accessible depuis le bouton de l'accueil ou l'URL `/demo` ; la saisie depuis le bouton de l'accueil ou l'URL `/saisie`. Ouvrir `/catalogue/` sans session redirige vers `/login?next=%2Fcatalogue%2F`. « Connexion » et « Inscription » ne sont pas des rubriques de navigation : ces actions restent disponibles depuis la page de connexion (lien « Créer un compte »).
 
 ### 2.2 Connexion, chiffrement du mot de passe et mode hors ligne
 
@@ -189,6 +189,7 @@ Les chiffres du classeur ne sont **pas** ceux de la page : `/export_excel` renvo
 | Export Excel/PDF qui ne télécharge pas | Requête ou capture interrompue | Vérifiez la connexion, réessayez et autorisez les téléchargements pour le site. |
 | Mes tâches disparaissent après actualisation | Saisie libre non sauvegardée | Conservez une copie de votre texte ou enregistrez le projet dans « Mes projets ». |
 | Redirection vers `/login?next=%2F` en ouvrant l'accueil | L'accueil exige une connexion | Connectez-vous, ou créez un compte depuis la page de connexion. |
+| Redirection vers `/login?next=%2Fcatalogue%2F` en ouvrant le catalogue | Le catalogue est réservé aux utilisateurs connectés | Connectez-vous ; vous serez ramené au catalogue (ou à la fiche demandée). |
 | Connexion impossible alors que les graphiques s'affichent | Clé publique ou Web Crypto indisponible (hors ligne) | Vérifiez la connexion et rechargez ; le formulaire en clair reste accepté. |
 
 ## 7. Lancer l'application en local (facultatif)
@@ -208,9 +209,9 @@ Ouvrez ensuite <http://127.0.0.1:5000>. L'accueil renvoie vers `/login` : créez
 
 ### 8.1 Catalogue de projets
 
-Ouvrez **🧰 Catalogue** dans la barre de navigation, ou `/catalogue/`. La liste publique présente **12 projets types variés** (construction d'une maison, application mobile, mariage, campagne marketing, thèse, ferme maraîchère, déménagement d'entreprise, formation en ligne, court métrage, cabinet médical, festival, refonte de site web), avec leur durée calculée.
+Connectez-vous d'abord : le lien **🧰 Catalogue** n'apparaît dans la barre de navigation qu'après connexion. Ouvrez-le (ou `/catalogue/`) pour consulter la liste des **12 projets types variés** (construction d'une maison, application mobile, mariage, campagne marketing, thèse, ferme maraîchère, déménagement d'entreprise, formation en ligne, court métrage, cabinet médical, festival, refonte de site web), avec leur durée calculée. Sans session, l'accès au catalogue est redirigé vers la page de connexion, avec retour vers la page demandée après authentification.
 
-Cliquez sur **Voir le projet** pour ouvrir la fiche `/catalogue/<id>` : vous y voyez le résumé, le tableau des calculs et le chemin critique, recalculés par le moteur PERT/CPM. Sur la fiche, le bouton **🚀 Optimiser ce projet** demande une connexion si nécessaire, crée une **copie du projet dans votre compte** avec les durées d'origine, puis ouvre directement la page de simulation d'optimisation. Le planning de référence n'est pas modifié par cette copie : les réductions ne sont que simulées tant que vous ne les appliquez pas explicitement.
+Cliquez sur **Voir le projet** pour ouvrir la fiche `/catalogue/<id>` : vous y voyez le résumé, le tableau des calculs et le chemin critique, recalculés par le moteur PERT/CPM. Sur la fiche, le bouton **🚀 Optimiser ce projet** crée une **copie du modèle dans votre propre compte** avec les durées d'origine, puis ouvre directement la page de simulation d'optimisation. Le modèle d'origine et le planning de référence ne sont pas modifiés : les réductions ne sont que simulées tant que vous ne les appliquez pas explicitement.
 
 ### 8.2 Conseils IA maison automatiques
 
@@ -227,3 +228,13 @@ Cet espace ne fait **aucun appel à un service externe**, ne demande aucune clé
 ### 8.4 « Se souvenir de moi »
 
 La case **Se souvenir de moi** est présente sur la page de connexion **et** sur celle de création de compte. Si vous la cochez, Flask-Login dépose le cookie persistant `remember_token` : vous restez reconnu après la fermeture du navigateur. Sans cette case, la session reste classique. Le bouton **Déconnexion** supprime ce cookie.
+
+### 8.5 Vérification de l'e-mail à l'inscription
+
+En production, chaque nouveau compte doit être validé par un **code à 6 chiffres** envoyé sur l'adresse e-mail fournie. Après l'inscription, vous êtes conduit sur `/verify` : saisissez le code reçu dans les 15 minutes (5 essais maximum). La validation connecte automatiquement le compte et ouvre l'accueil. Le bouton **Renvoyer le code** génère un nouveau code (au plus une fois par minute).
+
+Le code n'est jamais stocké en clair ni affiché une seconde fois. Si aucun serveur SMTP n'est configuré (développement local), l'application affiche le code une seule fois dans un avertissement et le consigne dans le log serveur : l'inscription reste possible. Les comptes créés avant l'activation de cette fonction restent valides.
+
+### 8.6 Visualisations avancées
+
+Sur la page de résultats, la section **📈 Representations avancées** permet de générer à la demande cinq graphiques SVG : histogramme des durées, histogramme des marges totales, diagramme circulaire critiques / non critiques, nuage de points durée ↔ marge et barres ES/EF/LS/LF. Cochez les graphiques souhaités puis cliquez sur **Générer les visualisations**. Tout est calculé dans le navigateur à partir des chiffres du moteur PERT : aucun service externe n'est appelé et le graphe PERT, le Gantt et les exports restent inchangés.

@@ -8,8 +8,9 @@ d'exécution de la suite.
 import html as html_module
 import re
 import unittest
+from urllib.parse import parse_qs, urlsplit
 
-from flask import Blueprint, Flask
+from flask import Blueprint, Flask, g
 
 from config import TestConfig
 from extensions import csrf, db, login_manager
@@ -21,7 +22,7 @@ from routes_projects import projects_bp
 
 
 class CatalogueTestCase(unittest.TestCase):
-    """Graphes valides, pages publiques, CSRF et flux d'optimisation."""
+    """Graphes valides, accès réservé aux connectés, CSRF et optimisation."""
 
     def setUp(self):
         self.app = Flask(
@@ -93,6 +94,12 @@ class CatalogueTestCase(unittest.TestCase):
     def _html(response):
         return response.get_data(as_text=True)
 
+    def _verifier_redirection_login(self, response, destination):
+        emplacement = response.headers.get('Location', '')
+        morceaux = urlsplit(emplacement)
+        self.assertEqual('/login', morceaux.path, msg=emplacement)
+        self.assertEqual([destination], parse_qs(morceaux.query).get('next'))
+
     @staticmethod
     def _jeton_csrf(html):
         correspondance = re.search(r'name="csrf_token"\s+value="([^"]+)"', html)
@@ -142,10 +149,22 @@ class CatalogueTestCase(unittest.TestCase):
             catalogue_logic.optimiser('inexistant', self.user_id)
 
     # ------------------------------------------------------------------
-    # Pages publiques
+    # Accès réservé aux utilisateurs connectés
     # ------------------------------------------------------------------
-    def test_index_public_200_affiche_cartes_et_navigation(self):
+    def test_index_anonyme_redirige_vers_login(self):
         response = self.app.test_client().get('/catalogue/')
+        self.assertEqual(302, response.status_code)
+        self._verifier_redirection_login(response, '/catalogue/')
+
+    def test_detail_anonyme_redirige_vers_login(self):
+        response = self.app.test_client().get('/catalogue/construction-maison')
+        self.assertEqual(302, response.status_code)
+        self._verifier_redirection_login(
+            response, '/catalogue/construction-maison'
+        )
+
+    def test_index_connecte_200_affiche_cartes_et_navigation(self):
+        response = self._client_connecte().get('/catalogue/')
         self.assertEqual(200, response.status_code)
         html = self._html(response)
 
@@ -161,15 +180,16 @@ class CatalogueTestCase(unittest.TestCase):
             self.assertIn(str(compute(projet['taches']).duree_totale), contenu)
         self.assertIn('design.css', self._derniere_feuille_style(html))
 
-        # Un anonyme ne voit pas les liens réservés aux utilisateurs connectés.
-        self.assertNotIn('Mes projets', html)
-        self.assertNotIn('Déconnexion', html)
+        # La navigation ne montre que les rubriques des utilisateurs connectés.
+        self.assertIn('Mes projets', html)
+        self.assertIn('Déconnexion', html)
 
-    def test_detail_public_200_tableau_et_formulaire(self):
-        client = self.app.test_client()
+    def test_detail_connecte_200_tableau_et_formulaire(self):
+        client = self._client_connecte()
         response = client.get('/catalogue/construction-maison')
         self.assertEqual(200, response.status_code)
         html = self._html(response)
+        self.assertIn('🧰 Catalogue', html)
 
         projet = catalogue_logic.get_projet('construction-maison')
         resultat = compute(projet['taches'])
@@ -186,7 +206,7 @@ class CatalogueTestCase(unittest.TestCase):
         self.assertNotIn('Saisie des tâches', html)
 
     def test_detail_inconnu_404(self):
-        response = self.app.test_client().get('/catalogue/inconnu')
+        response = self._client_connecte().get('/catalogue/inconnu')
         self.assertEqual(404, response.status_code)
 
     # ------------------------------------------------------------------
@@ -237,9 +257,19 @@ class CatalogueTestCase(unittest.TestCase):
         self.assertEqual(200, page.status_code)
 
     def test_optimisation_anonyme_redirige_vers_login(self):
+        connecte = self._client_connecte()
+        jeton = self._jeton_csrf(self._html(connecte.get('/catalogue/mariage')))
+        with connecte.session_transaction() as session:
+            jeton_brut = session['csrf_token']
+
+        # Client réellement anonyme, mais avec le jeton CSRF de session : la
+        # redirection Flask-Login doit intervenir avant toute copie en base.
+        # Le contexte applicatif partagé par les tests conserve l'utilisateur
+        # dans ``g`` : on purge ce cache avant la requête anonyme.
+        g.pop('_login_user', None)
         client = self.app.test_client()
-        html = self._html(client.get('/catalogue/mariage'))
-        jeton = self._jeton_csrf(html)
+        with client.session_transaction() as session:
+            session['csrf_token'] = jeton_brut
 
         with self.app.app_context():
             avant = Project.query.count()
@@ -248,8 +278,7 @@ class CatalogueTestCase(unittest.TestCase):
             '/catalogue/mariage/optimiser', data={'csrf_token': jeton}
         )
         self.assertEqual(302, response.status_code)
-        self.assertIn('/login', response.headers.get('Location', ''))
-        self.assertIn('next=', response.headers.get('Location', ''))
+        self._verifier_redirection_login(response, '/catalogue/mariage/optimiser')
         with self.app.app_context():
             self.assertEqual(avant, Project.query.count())
 

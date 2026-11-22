@@ -4,11 +4,21 @@ Fournit l'inscription, la connexion, la déconnexion et la gestion du profil.
 Les contrôles d'unicité et de mots de passe sont effectués côté serveur.
 """
 
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
+from flask import (
+    Blueprint, render_template, request, redirect, url_for, flash, jsonify,
+    session, current_app,
+)
 from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.security import check_password_hash
 
+import hashlib
+import hmac
+import secrets
+import time
+from datetime import datetime, timedelta, timezone
+
 import crypto_rsa
+from services import mail as service_mail
 
 try:
     from werkzeug.routing.exceptions import BuildError
@@ -23,6 +33,12 @@ from models import User
 auth_bp = Blueprint('auth', __name__)
 
 LONGUEUR_MIN_MOT_DE_PASSE = 8
+
+# Vérification de l'adresse e-mail : code à 6 chiffres, 15 minutes, 5 essais.
+CODE_VERIFICATION_LONGUEUR = 6
+CODE_VERIFICATION_TENTATIVES_MAX = 5
+CODE_VERIFICATION_DUREE_MINUTES = 15
+CODE_VERIFICATION_DELAI_RENVOI = 60
 
 
 def _url_sure(endpoint, repli):
@@ -41,6 +57,92 @@ def _url_projets():
 def _url_accueil():
     """URL de l'accueil, destination par défaut après connexion/inscription."""
     return _url_sure('accueil', '/')
+
+
+def _verification_active():
+    """La vérification e-mail est opt-in (désactivée dans les tests historiques)."""
+    return bool(current_app.config.get('EMAIL_VERIFICATION_ENABLED', False))
+
+
+def _maintenant_utc_naif():
+    """UTC naïf, compatible avec les colonnes DateTime sans fuseau."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def _generer_code_verification():
+    """Code à 6 chiffres, généré par le générateur cryptographique de Python."""
+    return f"{secrets.randbelow(10 ** CODE_VERIFICATION_LONGUEUR):0{CODE_VERIFICATION_LONGUEUR}d}"
+
+
+def _hash_code_verification(user, code):
+    """HMAC-SHA256(SECRET_KEY, « id:code ») : jamais le code en clair."""
+    secret = str(current_app.config.get('SECRET_KEY') or '').encode('utf-8')
+    charge = f"{getattr(user, 'id', '')}:{code}".encode('utf-8')
+    return hmac.new(secret, charge, hashlib.sha256).hexdigest()
+
+
+def _code_verification_correspond(user, code):
+    """Comparaison à temps constant du code soumis au hash stocké."""
+    hash_stocke = getattr(user, 'code_verification_hash', None)
+    if not hash_stocke:
+        return False
+    return hmac.compare_digest(str(hash_stocke), _hash_code_verification(user, code))
+
+
+def _utilisateur_par_email(email):
+    """Recherche l'utilisateur associé à une adresse e-mail (insensible à la casse)."""
+    if not email:
+        return None
+    return User.query.filter(func.lower(User.email) == email.strip().lower()).first()
+
+
+def _nettoyer_session_verification():
+    """Retire toutes les données temporaires de vérification de la session."""
+    for cle in ('verify_email', 'verify_remember', 'verify_dernier_envoi'):
+        session.pop(cle, None)
+
+
+def _preparer_code_verification(user, email, remember):
+    """Stocke le hash du code, tente l'envoi et informe l'utilisateur.
+
+    Retourne le code en clair uniquement à l'appelant : il n'est ni persisté,
+    ni transmis à un autre endpoint que le formulaire de vérification.
+    """
+    code = _generer_code_verification()
+    user.code_verification_hash = _hash_code_verification(user, code)
+    user.code_verification_expire = (
+        _maintenant_utc_naif()
+        + timedelta(minutes=CODE_VERIFICATION_DUREE_MINUTES)
+    )
+    user.tentatives_code = 0
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        raise
+
+    session['verify_email'] = email
+    session['verify_remember'] = bool(remember)
+    session['verify_dernier_envoi'] = time.time()
+
+    envoye = False
+    if service_mail.smtp_configure():
+        envoye = service_mail.envoyer_code(email, code, user.username)
+    if envoye:
+        flash("Un code de vérification vient de vous être envoyé par e-mail.", 'success')
+        current_app.logger.info("Code de vérification envoyé par e-mail.")
+    else:
+        # SMTP absent : affichage unique + log serveur (jamais en base).
+        flash(
+            "SMTP non configuré (mode développement) : votre code est "
+            f"{code}. Il n'a pas été envoyé par e-mail — ne le partagez pas.",
+            'warning'
+        )
+        current_app.logger.warning(
+            "Code de vérification (développement, SMTP absent) pour %s : %s",
+            email, code,
+        )
+    return code
 
 
 def _rendre(nom_template, **contexte):
@@ -172,7 +274,31 @@ def register():
                 db.session.rollback()
                 flash("Impossible de créer le compte. Veuillez réessayer.", 'error')
             else:
-                login_user(user, remember=bool(request.form.get('remember')))
+                remember = bool(request.form.get('remember'))
+                if _verification_active():
+                    # Le compte existe mais n'est pas connecté tant que le code
+                    # n'a pas été validé.
+                    if current_user.is_authenticated:
+                        logout_user()
+                    try:
+                        _preparer_code_verification(user, email, remember)
+                    except Exception:
+                        db.session.rollback()
+                        flash(
+                            "Impossible de préparer la vérification de l'e-mail. "
+                            "Veuillez réessayer.",
+                            'error'
+                        )
+                        return _rendre(
+                            'auth/register.html', username=username, email=email
+                        )
+                    flash(
+                        "Compte créé. Validez votre adresse e-mail pour vous connecter.",
+                        'success'
+                    )
+                    return redirect(url_for('auth.verify'))
+                # Parcours historique (vérification désactivée) : inchangé.
+                login_user(user, remember=remember)
                 flash("Compte créé avec succès. Bienvenue !", 'success')
                 return redirect(_url_accueil())
 
@@ -203,6 +329,16 @@ def login():
         if user is None or not _mot_de_passe_valide(user, mot_de_passe):
             # Message volontairement générique : ne révèle pas si le compte existe.
             flash("Identifiants invalides", 'error')
+        elif _verification_active() and not getattr(user, 'email_verifie', True):
+            session['verify_email'] = user.email
+            session['verify_remember'] = bool(request.form.get('remember'))
+            session.pop('verify_dernier_envoi', None)
+            flash(
+                "Votre adresse e-mail doit être vérifiée. Saisissez le code "
+                "reçu par e-mail (ou demandez-en un nouveau).",
+                'warning'
+            )
+            return redirect(url_for('auth.verify'))
         else:
             login_user(user, remember=bool(request.form.get('remember')))
             flash("Connexion réussie.", 'success')
@@ -213,6 +349,122 @@ def login():
         identifiant=identifiant,
         next=request.args.get('next', '')
     )
+
+
+@auth_bp.route('/verify', methods=['GET', 'POST'])
+def verify():
+    """Validation du code de vérification envoyé par e-mail (AUTH-05)."""
+    if not _verification_active():
+        flash("La vérification par e-mail n'est pas activée.", 'info')
+        return redirect(url_for('auth.login'))
+
+    email = session.get('verify_email')
+    if not email:
+        flash("Aucune vérification n'est en cours. Connectez-vous d'abord.", 'error')
+        return redirect(url_for('auth.login'))
+
+    user = _utilisateur_par_email(email)
+    if user is None or getattr(user, 'email_verifie', True):
+        _nettoyer_session_verification()
+        if user is not None:
+            flash("Adresse e-mail déjà vérifiée. Vous pouvez vous connecter.", 'success')
+        else:
+            flash("Compte introuvable. Veuillez vous connecter.", 'error')
+        return redirect(url_for('auth.login'))
+
+    if request.method == 'POST':
+        code = (request.form.get('code') or '').strip()
+        expiration = user.code_verification_expire
+        if expiration is not None and expiration <= _maintenant_utc_naif():
+            user.code_verification_hash = None
+            user.code_verification_expire = None
+            user.tentatives_code = 0
+            db.session.commit()
+            flash("Ce code a expiré. Demandez-en un nouveau.", 'error')
+        elif not user.code_verification_hash:
+            flash("Aucun code valide n'est en attente. Demandez-en un nouveau.", 'error')
+        elif _code_verification_correspond(user, code):
+            user.email_verifie = True
+            user.code_verification_hash = None
+            user.code_verification_expire = None
+            user.tentatives_code = 0
+            db.session.commit()
+            remember = bool(session.get('verify_remember', False))
+            _nettoyer_session_verification()
+            login_user(user, remember=remember)
+            flash("Adresse e-mail vérifiée. Bienvenue !", 'success')
+            return redirect(_url_accueil())
+        else:
+            # Message générique : on ne précise pas ce qui était attendu.
+            user.tentatives_code = (user.tentatives_code or 0) + 1
+            if user.tentatives_code >= CODE_VERIFICATION_TENTATIVES_MAX:
+                user.code_verification_hash = None
+                user.code_verification_expire = None
+                db.session.commit()
+                flash(
+                    "Trop de tentatives infructueuses. Demandez un nouveau code.",
+                    'error'
+                )
+            else:
+                db.session.commit()
+                flash("Code incorrect. Veuillez réessayer.", 'error')
+
+    restantes = max(
+        0,
+        CODE_VERIFICATION_TENTATIVES_MAX - (user.tentatives_code or 0)
+    )
+    return _rendre(
+        'auth/verify.html',
+        email=email,
+        tentatives_restantes=restantes,
+        delai_renvoi=CODE_VERIFICATION_DELAI_RENVOI,
+    )
+
+
+@auth_bp.route('/verify/renvoyer', methods=['POST'])
+def renvoyer_code():
+    """Régénère et renvoie le code, au plus une fois par minute (CSRF global)."""
+    if not _verification_active():
+        flash("La vérification par e-mail n'est pas activée.", 'info')
+        return redirect(url_for('auth.login'))
+
+    email = session.get('verify_email')
+    if not email:
+        flash("Aucune vérification n'est en cours. Connectez-vous d'abord.", 'error')
+        return redirect(url_for('auth.login'))
+
+    dernier_envoi = session.get('verify_dernier_envoi')
+    if dernier_envoi is not None:
+        try:
+            ecart = time.time() - float(dernier_envoi)
+        except (TypeError, ValueError):
+            ecart = CODE_VERIFICATION_DELAI_RENVOI
+        if ecart < CODE_VERIFICATION_DELAI_RENVOI:
+            restant = int(CODE_VERIFICATION_DELAI_RENVOI - ecart) + 1
+            flash(
+                f"Veuillez patienter {restant} secondes avant de demander "
+                "un nouveau code.",
+                'error'
+            )
+            return redirect(url_for('auth.verify'))
+
+    user = _utilisateur_par_email(email)
+    if user is None or getattr(user, 'email_verifie', True):
+        _nettoyer_session_verification()
+        if user is not None:
+            flash("Adresse e-mail déjà vérifiée. Vous pouvez vous connecter.", 'success')
+        else:
+            flash("Compte introuvable. Veuillez vous connecter.", 'error')
+        return redirect(url_for('auth.login'))
+
+    try:
+        _preparer_code_verification(
+            user, user.email, session.get('verify_remember', False)
+        )
+    except Exception:
+        db.session.rollback()
+        flash("Impossible de renvoyer le code. Veuillez réessayer.", 'error')
+    return redirect(url_for('auth.verify'))
 
 
 @auth_bp.route('/logout')
