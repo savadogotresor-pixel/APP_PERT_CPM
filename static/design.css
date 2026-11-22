@@ -1627,28 +1627,33 @@ table.data-table tbody tr.row-critical:hover {
   .col-lg-6 { flex: 0 0 50%; max-width: 50%; }
 }
 
-@media (min-width: 1200px) {
-  .container,
-  .container-fluid {
-    max-width: 1280px;
-  }
-}
+/* La largeur de .container reste celle du design historique (1100 px) :
+   l'élargir sur grand écran déséquilibrait les cartes et les tableaux. */
 
-/* Tablette et petits écrans d'ordinateur : la marque reste visible et la
-   navigation devient une bande défilante au toucher, au lieu de s'empiler. */
+/* Tablette et petits écrans d'ordinateur : marges réduites et tableaux
+   défilants. La navigation reste normale au-dessus de 900 px. */
 @media (max-width: 1024px) {
   .app-shell {
     padding-left: var(--space-4);
     padding-right: var(--space-4);
   }
 
-  .topbar {
-    flex-wrap: nowrap;
-    gap: var(--space-3);
-    padding-left: var(--space-4);
-    padding-right: var(--space-4);
+  .table-wrapper {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
   }
 
+  .footer {
+    flex-wrap: wrap;
+    row-gap: var(--space-2);
+  }
+}
+
+/* Tablette portrait et smartphone : la navigation devient une bande
+   horizontale défilante, ce qui évite d'empiler 6 à 8 liens sur mobile.
+   Au-dessus de 900 px (PC), la navigation reste en une seule ligne visible. */
+@media (max-width: 900px) {
   .topbar-nav {
     flex-direction: row;
     align-items: center;
@@ -1667,17 +1672,6 @@ table.data-table tbody tr.row-critical:hover {
   .topbar-nav > li {
     flex: 0 0 auto;
     scroll-snap-align: start;
-  }
-
-  .table-wrapper {
-    width: 100%;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-  }
-
-  .footer {
-    flex-wrap: wrap;
-    row-gap: var(--space-2);
   }
 }
 
@@ -1729,7 +1723,7 @@ table.data-table tbody tr.row-critical:hover {
 
 /* Écrans tactiles : 16 px minimum évite le zoom automatique du navigateur
    Android/iOS à la saisie, et 44 px garantit une cible cliquable confortable. */
-@media (pointer: coarse) {
+@media (pointer: coarse) and (max-width: 1024px) {
   input:not([type='hidden']),
   select,
   textarea,

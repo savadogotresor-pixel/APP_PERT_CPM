@@ -13,7 +13,7 @@
     "use strict";
 
     var PREFIXE_CACHE = "pert-cpm-";
-    var CACHE_ACTUEL = PREFIXE_CACHE + "shell-v1";
+    var CACHE_ACTUEL = PREFIXE_CACHE + "shell-v2";
     var URL_OFFLINE = "/offline";
 
     /* App shell pré-cachée à l'installation. Chaque ajout est isolé : une
@@ -21,7 +21,7 @@
     var SHELL = [
         "/",
         "/static/style.css",
-        "/static/design.css",
+        "/static/design.css?v=3",
         "/static/resultats.css",
         "/static/pert-engine.js",
         "/static/offline.js",

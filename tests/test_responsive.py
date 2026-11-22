@@ -47,6 +47,16 @@ class ResponsiveTestCase(unittest.TestCase):
                 self.assertTrue(liens, msg='Aucune feuille de style')
                 self.assertIn('design.css', liens[-1])
 
+    def test_design_css_est_versionne_et_le_cache_pwa_est_rafraichi(self):
+        """Les navigateurs ayant l'ancien CSS doivent recharger la nouvelle version."""
+        for chemin in _fichiers_gabarit():
+            with self.subTest(gabarit=os.path.relpath(chemin, RACINE)):
+                contenu = open(chemin, encoding='utf-8').read()
+                self.assertIn("design.css', v=3", contenu)
+        sw = open(os.path.join(RACINE, 'static', 'sw.js'), encoding='utf-8').read()
+        self.assertIn('shell-v2', sw)
+        self.assertIn('/static/design.css?v=3', sw)
+
     def test_aucun_bootstrap_dist_nest_pas_en_cache_par_le_service_worker(self):
         """Le responsive reste autonome : pas de CDN Bootstrap à charger."""
         for chemin in _fichiers_gabarit():
