@@ -24,7 +24,13 @@ Une fois connecté, la barre de navigation donne accès à **🧰 Catalogue**, �
 
 ### 2.2 Connexion, chiffrement du mot de passe et mode hors ligne
 
-Sur `/login`, saisissez votre nom d'utilisateur ou votre adresse e-mail et votre mot de passe. **En ligne**, le navigateur récupère la clé publique sur `/auth/public-key` et chiffre le mot de passe (RSA-OAEP-SHA256) avant l'envoi dans le champ caché `password_chiffre` ; le serveur détient seul la clé privée. Le mot de passe est ensuite stocké sous forme de hachage.
+Sur `/login`, saisissez votre adresse e-mail (ou votre nom d'utilisateur) et votre mot de passe. **En ligne**, le navigateur récupère la clé publique sur `/auth/public-key` et chiffre le mot de passe (RSA-OAEP-SHA256) avant l'envoi dans le champ caché `password_chiffre` ; le serveur détient seul la clé privée. Le mot de passe est ensuite stocké sous forme de hachage.
+
+### 2.2 bis Création de compte avec l'e-mail seulement
+
+Sur `/register`, **l'e-mail et le mot de passe suffisent** : le nom d'utilisateur est facultatif et, s'il est laissé vide, il est généré automatiquement depuis la partie locale de l'adresse e-mail. Le compte est immédiatement enregistré dans la base de données de l'application (SQLite en local, PostgreSQL en production) : vous n'avez pas à le recréer pour vous connecter ensuite.
+
+Si vous saisissez à nouveau une adresse déjà enregistrée, l'application **ne crée pas de doublon** : elle vous redirige vers `/login` avec l'e-mail pré-rempli, ou vers `/verify` si le code de vérification n'a pas encore été validé. Utilisez toujours le même e-mail pour retrouver votre compte et vos projets.
 
 Si JavaScript, Web Crypto ou la clé publique est indisponible (page ouverte hors ligne, par exemple), le formulaire envoie le mot de passe en clair : le serveur accepte ce format pour compatibilité. Le calcul PERT/CPM reste utilisable hors ligne, mais les graphiques et les exports peuvent ne pas s'afficher sans accès aux CDN.
 
@@ -244,7 +250,7 @@ La case **Se souvenir de moi** est présente sur la page de connexion **et** sur
 
 En production, chaque nouveau compte doit être validé par un **code à 6 chiffres** envoyé sur l'adresse e-mail fournie. Après l'inscription, vous êtes conduit sur `/verify` : saisissez le code reçu dans les 15 minutes (5 essais maximum). La validation connecte automatiquement le compte et ouvre l'accueil. Le bouton **Renvoyer le code** génère un nouveau code (au plus une fois par minute).
 
-Le code n'est jamais stocké en clair ni affiché une seconde fois. Si aucun serveur SMTP n'est configuré (développement local), l'application affiche le code une seule fois dans un avertissement et le consigne dans le log serveur : l'inscription reste possible. Les comptes créés avant l'activation de cette fonction restent valides.
+Le code n'est jamais stocké en clair ni affiché une seconde fois. Si aucun serveur SMTP n'est configuré (développement local), l'application affiche le code une seule fois dans un avertissement et le consigne dans le log serveur : l'inscription reste possible. Les comptes créés avant l'activation de cette fonction restent valides. Une seconde inscription avec le même e-mail reprend la vérification en cours au lieu de créer un nouveau compte.
 
 ### 8.6 Visualisations avancées
 

@@ -13,6 +13,7 @@ from werkzeug.security import check_password_hash
 
 import hashlib
 import hmac
+import re
 import secrets
 import time
 from datetime import datetime, timedelta, timezone
@@ -160,6 +161,19 @@ def _utilisateur_existe(champ, valeur, exclure_id=None):
     return requete.first() is not None
 
 
+def _generer_username(email):
+    """Dérive un nom d'utilisateur unique de l'adresse e-mail fournie."""
+    base = re.sub(r'[^a-z0-9._-]+', '.', str(email or '').split('@')[0].lower())
+    base = base.strip('._-')[:80] or 'utilisateur'
+    username = base
+    suffixe = 1
+    while _utilisateur_existe('username', username):
+        fin = f'.{suffixe}'
+        username = base[:80 - len(fin)] + fin
+        suffixe += 1
+    return username
+
+
 def _mot_de_passe_valide(user, mot_de_passe):
     """Compare un mot de passe au hachage stocké, sans fuite d'information."""
     if not mot_de_passe or not getattr(user, 'password_hash', None):
@@ -250,57 +264,83 @@ def register():
             ) or ''
         )
 
-        if not username or not email or not mot_de_passe:
-            flash("Tous les champs sont obligatoires.", 'error')
-        elif _utilisateur_existe('username', username):
-            flash("Ce nom d'utilisateur est déjà utilisé.", 'error')
-        elif _utilisateur_existe('email', email):
-            flash("Cette adresse e-mail est déjà utilisée.", 'error')
-        elif len(mot_de_passe) < LONGUEUR_MIN_MOT_DE_PASSE:
-            flash(
-                "Le mot de passe doit contenir au moins "
-                f"{LONGUEUR_MIN_MOT_DE_PASSE} caractères.",
-                'error'
-            )
-        elif mot_de_passe != confirmation:
-            flash("Les mots de passe ne correspondent pas.", 'error')
+        if not email or not mot_de_passe:
+            flash("L'adresse e-mail et le mot de passe sont obligatoires.", 'error')
         else:
-            user = User(username=username, email=email)
-            user.set_password(mot_de_passe)
-            try:
-                db.session.add(user)
-                db.session.commit()
-            except Exception:
-                db.session.rollback()
-                flash("Impossible de créer le compte. Veuillez réessayer.", 'error')
-            else:
-                remember = bool(request.form.get('remember'))
-                if _verification_active():
-                    # Le compte existe mais n'est pas connecté tant que le code
-                    # n'a pas été validé.
-                    if current_user.is_authenticated:
-                        logout_user()
-                    try:
-                        _preparer_code_verification(user, email, remember)
-                    except Exception:
-                        db.session.rollback()
-                        flash(
-                            "Impossible de préparer la vérification de l'e-mail. "
-                            "Veuillez réessayer.",
-                            'error'
-                        )
-                        return _rendre(
-                            'auth/register.html', username=username, email=email
-                        )
+            existant = _utilisateur_par_email(email)
+            if existant is not None:
+                # Un compte est déjà enregistré pour cette adresse : on ne
+                # demande jamais à l'utilisateur d'en créer un second.
+                if (
+                    _verification_active()
+                    and not getattr(existant, 'email_verifie', True)
+                ):
+                    session['verify_email'] = existant.email
+                    session['verify_remember'] = bool(request.form.get('remember'))
+                    session.pop('verify_dernier_envoi', None)
                     flash(
-                        "Compte créé. Validez votre adresse e-mail pour vous connecter.",
-                        'success'
+                        "Un compte est déjà associé à cette adresse e-mail. "
+                        "Saisissez le code de vérification reçu pour finaliser "
+                        "votre connexion.",
+                        'warning'
                     )
                     return redirect(url_for('auth.verify'))
-                # Parcours historique (vérification désactivée) : inchangé.
-                login_user(user, remember=remember)
-                flash("Compte créé avec succès. Bienvenue !", 'success')
-                return redirect(_url_accueil())
+                flash(
+                    "Un compte est déjà associé à cette adresse e-mail. "
+                    "Connectez-vous plutôt que d'en créer un nouveau.",
+                    'info'
+                )
+                return redirect(url_for('auth.login', email=email))
+            if username and _utilisateur_existe('username', username):
+                flash("Ce nom d'utilisateur est déjà utilisé.", 'error')
+            elif len(mot_de_passe) < LONGUEUR_MIN_MOT_DE_PASSE:
+                flash(
+                    "Le mot de passe doit contenir au moins "
+                    f"{LONGUEUR_MIN_MOT_DE_PASSE} caractères.",
+                    'error'
+                )
+            elif mot_de_passe != confirmation:
+                flash("Les mots de passe ne correspondent pas.", 'error')
+            else:
+                username = username or _generer_username(email)
+                user = User(username=username, email=email)
+                user.set_password(mot_de_passe)
+                try:
+                    db.session.add(user)
+                    db.session.commit()
+                except Exception:
+                    db.session.rollback()
+                    flash(
+                        "Impossible de créer le compte. Veuillez réessayer.", 'error'
+                    )
+                else:
+                    remember = bool(request.form.get('remember'))
+                    if _verification_active():
+                        # Le compte existe mais n'est pas connecté tant que le code
+                        # n'a pas été validé.
+                        if current_user.is_authenticated:
+                            logout_user()
+                        try:
+                            _preparer_code_verification(user, email, remember)
+                        except Exception:
+                            db.session.rollback()
+                            flash(
+                                "Impossible de préparer la vérification de l'e-mail. "
+                                "Veuillez réessayer.",
+                                'error'
+                            )
+                            return _rendre(
+                                'auth/register.html', username=username, email=email
+                            )
+                        flash(
+                            "Compte créé. Validez votre adresse e-mail pour vous connecter.",
+                            'success'
+                        )
+                        return redirect(url_for('auth.verify'))
+                    # Parcours historique (vérification désactivée) : inchangé.
+                    login_user(user, remember=remember)
+                    flash("Compte créé avec succès. Bienvenue !", 'success')
+                    return redirect(_url_accueil())
 
     return _rendre('auth/register.html', username=username, email=email)
 
@@ -344,9 +384,14 @@ def login():
             flash("Connexion réussie.", 'success')
             return redirect(_cible_apres_connexion() or _url_accueil())
 
+    identifiant_initial = (
+        identifiant
+        if request.method == 'POST'
+        else (request.args.get('email') or request.args.get('identifiant') or '')
+    )
     return _rendre(
         'auth/login.html',
-        identifiant=identifiant,
+        identifiant=identifiant_initial,
         next=request.args.get('next', '')
     )
 

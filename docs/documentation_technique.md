@@ -56,7 +56,7 @@ Lecture du schéma :
 | `config.py` | `Config` (développement), `ProductionConfig` (secrets obligatoires, cookies sûrs), `TestConfig` (SQLite mémoire, CSRF désactivé). Normalise `postgres://` en `postgresql://`. |
 | `extensions.py` | Instances partagées `db` (SQLAlchemy), `login_manager` (Flask-Login), `csrf` (Flask-WTF). |
 | `models.py` | Entités `User`, `Project`, `Task`, `Dependency`, `ProjectAccess`, `Scenario`, `AuditLog` ; hachage des mots de passe ; `project_to_taches()` ; `user_can_access()` ; `init_db()` (`db.create_all()`). |
-| `routes_auth.py` | Blueprint `auth` : inscription, connexion, déconnexion, profil, endpoint public `/auth/public-key` ; validation serveur, messages génériques, filtrage de `next` contre les redirections ouvertes, lecture des mots de passe chiffrés ou en clair. |
+| `routes_auth.py` | Blueprint `auth` : inscription, connexion, déconnexion, profil, endpoint public `/auth/public-key` ; validation serveur, messages génériques, filtrage de `next` contre les redirections ouvertes, lecture des mots de passe chiffrés ou en clair. L'e-mail est l'identifiant unique : `username` est facultatif et généré depuis l'e-mail ; un e-mail existant redirige vers la connexion ou la vérification sans créer de doublon. |
 | `crypto_rsa.py` | Chiffrement des identifiants : initialisation idempotente de la clé (variable d'environnement ou clé générée en mémoire), PEM SPKI public, déchiffrement RSA-OAEP-SHA256. La clé privée n'est ni exposée ni journalisée. |
 | `routes_projects.py` | Blueprint `projects` (préfixe `/projects`) : CRUD projets/tâches, archivage, import/export, rapport PDF, scénarios d'optimisation, journalisation des actions. |
 | `routes_ia.py` | Blueprint `ia` (préfixe `/ia`) : interface conversationnelle, contrôle d'accès avant construction du contexte, historique de session (20 messages), limitation d'usage, audit `IA_ASSISTANT`, fallback déterministe si le service est absent. |
@@ -204,7 +204,7 @@ python -c "from app import app; [print(','.join(sorted(r.methods - {'HEAD','OPTI
 | Méthode | Chemin | Accès | Description |
 |---|---|---|---|
 | GET | `/auth/public-key` | public | JSON `{cle_publique, algorithme, champ, format}` avec une clé PEM SPKI ; `Cache-Control: public, max-age=3600`. |
-| GET, POST | `/register` | public | Création de compte ; mot de passe ≥ 8 caractères, confirmé et haché. |
+| GET, POST | `/register` | public | Création de compte avec e-mail + mot de passe ≥ 8 caractères confirmé et haché ; `username` facultatif (généré depuis l'e-mail). Un e-mail déjà enregistré redirige vers `/login?email=...` ou `/verify`, sans doublon. |
 | GET, POST | `/login` | public | Connexion par nom d'utilisateur ou e-mail ; `next` limité à un chemin local. |
 | GET | `/logout` | connecté | Déconnexion et redirection vers `/login`. |
 | GET, POST | `/profile` | connecté | Modification du nom, de l'e-mail et du mot de passe (ancien mot de passe requis). |
@@ -305,7 +305,7 @@ Sous Windows avec l'interpréteur Anaconda :
 & 'C:\Users\ASUS\anaconda3\python.exe' -m unittest discover -s tests -v
 ```
 
-La suite couvre le moteur, le parseur, les routes HTTP, l'authentification, les projets, les modèles, le catalogue (`tests/test_catalogue.py`), l'import/export, l'optimisation et le rapport PDF. `TestConfig` utilise une base SQLite en mémoire et désactive CSRF ; les tests du catalogue réactivent `WTF_CSRF_ENABLED` et extraient le jeton des formulaires. Les tests HTTP d'authentification positionnent `APP_SETTINGS` avant d'importer `app`. Un test ciblé s'exécute avec `python -m unittest tests.test_pert -v` ou, pour le catalogue, `python -m unittest tests.test_catalogue -v`. Le détail des cas figure dans `docs/recette.md`.
+La suite couvre le moteur, le parseur, les routes HTTP, l'authentification (dont `tests/test_inscription_email_unique.py`), les projets, les modèles, le catalogue (`tests/test_catalogue.py`), l'import/export, l'optimisation et le rapport PDF. `TestConfig` utilise une base SQLite en mémoire et désactive CSRF ; les tests du catalogue réactivent `WTF_CSRF_ENABLED` et extraient le jeton des formulaires. Les tests HTTP d'authentification positionnent `APP_SETTINGS` avant d'importer `app`. Un test ciblé s'exécute avec `python -m unittest tests.test_pert -v` ou, pour le catalogue, `python -m unittest tests.test_catalogue -v`. Le détail des cas figure dans `docs/recette.md`.
 
 ## 7. Flux de calcul PERT
 
@@ -462,7 +462,11 @@ Les cases `remember` des gabarits `auth/login.html` et `auth/register.html` sont
 
 ### 20.5 Vérification de l'e-mail à l'inscription
 
-`models.User` porte `email_verifie`, `code_verification_hash`, `code_verification_expire` et `tentatives_code` ; `init_db()` ajoute ces colonnes de façon idempotente aux bases existantes, avec `DEFAULT TRUE` sur `email_verifie` pour ne pas bloquer les comptes historiques. Le code à 6 chiffres est généré par `secrets`, stocké uniquement en HMAC-SHA256 (`SECRET_KEY`) et comparé avec `hmac.compare_digest`. Il expire après 15 minutes, 5 essais sont autorisés et le renvoi est limité à une fois par minute. `services/mail.py` envoie le message via `smtplib` (stdlib) ; sans `MAIL_SERVER`, l'inscription reste possible et le code est affiché une seule fois en flash puis consigné côté serveur. `EMAIL_VERIFICATION_ENABLED` est actif par défaut en production, désactivé dans `TestConfig`, et peut être forcé à `0` par variable d'environnement.
+`models.User` porte `email_verifie`, `code_verification_hash`, `code_verification_expire` et `tentatives_code` ; `init_db()` ajoute ces colonnes de façon idempotente aux bases existantes, avec `DEFAULT TRUE` sur `email_verifie` pour ne pas bloquer les comptes historiques. Le code à 6 chiffres est généré par `secrets`, stocké uniquement en HMAC-SHA256 (`SECRET_KEY`) et comparé avec `hmac.compare_digest`. Il expire après 15 minutes, 5 essais sont autorisés et le renvoi est limité à une fois par minute. `services/mail.py` envoie le message via `smtplib` (stdlib) ; sans `MAIL_SERVER`, l'inscription reste possible et le code est affiché une seule fois en flash puis consigné côté serveur. `EMAIL_VERIFICATION_ENABLED` est actif par défaut en production, désactivé dans `TestConfig`, et peut être forcé à `0` par variable d'environnement. Si une seconde inscription utilise le même e-mail, `register()` détecte le compte existant via `_utilisateur_par_email()` et redirige vers `/verify` tant que le code n'est pas validé, sinon vers `/login?email=...` avec le champ identifiant pré-rempli : **aucun doublon n'est créé** et le mot de passe initial reste valable.
+
+### 20.5 bis Compte enregistré automatiquement depuis l'e-mail
+
+Le formulaire `auth/register.html` ne rend plus `username` obligatoire : l'e-mail et le mot de passe suffisent. `routes_auth.py` dérive le nom d'utilisateur avec `_generer_username(email)` (partie locale de l'adresse, caractères non alphanumériques remplacés par `.`, suffixe `.1`, `.2`, … en cas de collision) et applique les mêmes validations qu'auparavant (`User` unique sur `username` et `email`, mot de passe ≥ 8 caractères). Le compte est inséré et commité dans la base SQLAlchemy configurée (`SQLite` en développement, `DATABASE_URL` PostgreSQL en production) : aucune base supplémentaire ni service externe n'est nécessaire. Les tests `tests/test_inscription_email_unique.py` vérifient l'inscription sans `username`, l'absence de duplicata et la connexion réussie depuis un **nouveau client HTTP**.
 
 ### 20.6 Visualisations avancées
 

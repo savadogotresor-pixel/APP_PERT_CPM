@@ -52,7 +52,7 @@
                 <div class="page-header">
                     <div>
                         <h1 class="page-title">Créer un compte</h1>
-                        <p class="page-subtitle">Inscrivez-vous pour enregistrer et retrouver vos projets.</p>
+                        <p class="page-subtitle">Votre e-mail sert d'identifiant : le compte est enregistré automatiquement.</p>
                     </div>
                 </div>
 
@@ -65,9 +65,11 @@
 
                     <div class="form-grid">
                         <div class="champ field">
-                            <label for="username">Nom d'utilisateur</label>
+                            <label for="username">Nom d'utilisateur (facultatif)</label>
                             <input type="text" id="username" name="username"
-                                   value="{{ username|default('', true) }}" required autofocus>
+                                   value="{{ username|default('', true) }}" autofocus
+                                   placeholder="Généré depuis votre e-mail si vide">
+                            <p class="astuce field-hint">Laissez vide : le compte sera créé avec votre adresse e-mail.</p>
                         </div>
                         <div class="champ field">
                             <label for="email">Adresse e-mail</label>
