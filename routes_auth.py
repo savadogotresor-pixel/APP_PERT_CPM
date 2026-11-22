@@ -348,6 +348,12 @@ def register():
 @auth_bp.route('/login', methods=['GET', 'POST'])
 def login():
     """Connexion par nom d'utilisateur ou e-mail (AUTH-02)."""
+    # Un utilisateur déjà authentifié n'a pas à revoir le formulaire : on le
+    # renvoie vers son tableau de bord, ou vers un paramètre ``next`` local
+    # valide (ex. la page protégée qu'il tentait d'ouvrir avant connexion).
+    if current_user.is_authenticated:
+        return redirect(_cible_apres_connexion() or _url_accueil())
+
     identifiant = (
         request.form.get('username')
         or request.form.get('email')

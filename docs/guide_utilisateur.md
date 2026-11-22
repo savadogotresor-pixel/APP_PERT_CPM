@@ -244,7 +244,9 @@ Cet espace ne fait **aucun appel à un service externe**, ne demande aucune clé
 
 ### 8.4 « Se souvenir de moi »
 
-La case **Se souvenir de moi** est présente sur la page de connexion **et** sur celle de création de compte. Si vous la cochez, Flask-Login dépose le cookie persistant `remember_token` : vous restez reconnu après la fermeture du navigateur. Sans cette case, la session reste classique. Le bouton **Déconnexion** supprime ce cookie.
+La case **Se souvenir de moi** est présente sur la page de connexion **et** sur celle de création de compte. Si vous la cochez, Flask-Login dépose le cookie persistant `remember_token` : vous restez reconnu après la fermeture complète de Chrome ou Edge, jusqu'à son expiration (**30 jours**) ou votre déconnexion. Ce cookie ne contient **jamais votre mot de passe** : il ne fait que restaurer l'authentification. Sans cette case, la connexion repose uniquement sur la session temporaire du navigateur. Le bouton **Déconnexion** supprime immédiatement le cookie.
+
+Si vous êtes déjà connecté et que vous ouvrez à nouveau la page de connexion, vous êtes automatiquement renvoyé vers votre accueil (votre tableau de bord), ou vers la page protégée que vous essayiez d'ouvrir. Vos projets enregistrés restent accessibles après reconnexion, et chaque compte ne voit que ses propres projets (sauf partage explicite).
 
 ### 8.5 Vérification de l'e-mail à l'inscription
 

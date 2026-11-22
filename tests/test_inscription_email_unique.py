@@ -129,6 +129,9 @@ class InscriptionEmailUniqueTestCase(unittest.TestCase):
         client = self.app.test_client()
         self._inscrire(client, username='PremierCompte')
         self.assertEqual(1, User.query.filter_by(email=self.email).count())
+        # On repart d'une session anonyme : un utilisateur déjà connecté est
+        # désormais redirigé vers son accueil s'il ouvre /login.
+        client.get('/logout')
 
         seconde = self._inscrire(client, username='SecondCompte')
         self.assertEqual(302, seconde.status_code)

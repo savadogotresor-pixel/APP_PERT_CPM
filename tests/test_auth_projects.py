@@ -7,6 +7,7 @@ connexion, gestion des projets, création de tâches et détection de cycles.
 import os
 import re
 import unittest
+import uuid
 
 from sqlalchemy import create_engine
 
@@ -324,6 +325,56 @@ class AuthProjectsTestCase(unittest.TestCase):
             'date_debut': '2026-11-21',
         })
         self.assertEqual(200, resultats.status_code)
+
+    # ------------------------------------------------------------------
+    # 7. Persistance SQLite après reconnexion
+    # ------------------------------------------------------------------
+    def test_projets_restent_accessibles_apres_reconnexion(self):
+        suffixe = uuid.uuid4().hex[:10]
+        username = f'persistant_{suffixe}'
+        email = f'{suffixe}@persistant.test'
+        self._inscrire(username, email)
+        nom_projet = f'Projet persistant {suffixe}'
+        projet_id = self._nouveau_projet(nom_projet)
+
+        self._deconnecter()
+        self._connecter(email)
+        liste = self.client.get('/projects/')
+        self.assertEqual(200, liste.status_code, msg=self._html(liste)[:2000])
+        self.assertIn(nom_projet, self._html(liste))
+        detail = self.client.get(f'/projects/{projet_id}')
+        self.assertEqual(200, detail.status_code, msg=self._html(detail)[:2000])
+
+    # ------------------------------------------------------------------
+    # 8. Isolation des projets entre comptes
+    # ------------------------------------------------------------------
+    def test_chaque_utilisateur_ne_voit_que_ses_projets(self):
+        suffixe = uuid.uuid4().hex[:10]
+        email_a = f'a_{suffixe}@isolation.test'
+        email_b = f'b_{suffixe}@isolation.test'
+        self._inscrire(f'a_{suffixe}', email_a)
+        nom_a = f'Projet A {suffixe}'
+        projet_a = self._nouveau_projet(nom_a)
+        self._deconnecter()
+
+        client_b = self.app.test_client()
+        self._inscrire(f'b_{suffixe}', email_b, client=client_b)
+        nom_b = f'Projet B {suffixe}'
+        projet_b = self._nouveau_projet(nom_b, client=client_b)
+
+        liste_b = client_b.get('/projects/')
+        self.assertEqual(200, liste_b.status_code)
+        self.assertIn(nom_b, self._html(liste_b))
+        self.assertNotIn(nom_a, self._html(liste_b))
+        self.assertEqual(403, client_b.get(f'/projects/{projet_a}').status_code)
+
+        client_a = self.app.test_client()
+        self._connecter(email_a, client=client_a)
+        liste_a = client_a.get('/projects/')
+        self.assertEqual(200, liste_a.status_code)
+        self.assertIn(nom_a, self._html(liste_a))
+        self.assertNotIn(nom_b, self._html(liste_a))
+        self.assertEqual(403, client_a.get(f'/projects/{projet_b}').status_code)
 
 
 if __name__ == '__main__':

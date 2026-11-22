@@ -23,7 +23,13 @@ class Config:
     REMEMBER_COOKIE_NAME = 'remember_token'
     REMEMBER_COOKIE_DURATION = timedelta(days=30)
     REMEMBER_COOKIE_HTTPONLY = True
-    REMEMBER_COOKIE_REFRESH_EACH_REQUEST = True
+    REMEMBER_COOKIE_SAMESITE = 'Lax'
+    # False est essentiel : avec True, Flask-Login reposerait le cookie sur
+    # CHAQUE réponse d'un utilisateur connecté, y compris quand la case
+    # « Se souvenir de moi » n'a pas été cochée. Le cookie n'est donc posé
+    # qu'à l'authentification explicite avec remember=True, puis expire au
+    # bout de 30 jours (le navigateur le supprime alors).
+    REMEMBER_COOKIE_REFRESH_EACH_REQUEST = False
     PERMANENT_SESSION_LIFETIME = timedelta(days=30)
 
     # Assistant IA (§19) : la clé reste exclusivement côté serveur. Elle n'est

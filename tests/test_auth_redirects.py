@@ -10,11 +10,14 @@ import os
 import re
 import unittest
 import uuid
+from datetime import datetime, timedelta, timezone
+from email.utils import parsedate_to_datetime
 from http.cookies import SimpleCookie
 from urllib.parse import parse_qs, unquote, urlsplit
 
 from sqlalchemy import create_engine
 
+from config import ProductionConfig
 from models import User
 
 
@@ -298,7 +301,9 @@ class AuthRedirectsTestCase(unittest.TestCase):
         )
         self.assertEqual(302, connexion.status_code)
 
-        for chemin in ('/login', '/register', '/catalogue/', '/demo'):
+        # /login redirige désormais vers le tableau de bord ; les autres pages
+        # restent affichables avec la navigation complète.
+        for chemin in ('/register', '/catalogue/', '/demo'):
             with self.subTest(chemin=chemin):
                 reponse = self.client.get(chemin)
                 self.assertEqual(
@@ -306,6 +311,147 @@ class AuthRedirectsTestCase(unittest.TestCase):
                 )
                 nav = self._nav(self._html(reponse))
                 self.assertIn('Catalogue', nav)
+
+    # ------------------------------------------------------------------
+    # 8. Utilisateur déjà connecté : /login redirige vers le tableau de bord
+    # ------------------------------------------------------------------
+    def test_utilisateur_connecte_visitant_login_est_redirige(self):
+        username, _email = self._creer_utilisateur()
+        connexion = self.client.post(
+            '/login', data=self._donnees_connexion(username)
+        )
+        self.assertEqual(302, connexion.status_code)
+
+        accueil = self.client.get('/login')
+        self.assertEqual(302, accueil.status_code)
+        self.assertEqual('/', self._chemin(accueil))
+
+        # Un ``next`` local valide reste prioritaire ; un ``next`` externe est
+        # refusé pour éviter une redirection ouverte.
+        local = self.client.get('/login?next=/projects/')
+        self.assertEqual(302, local.status_code)
+        self.assertEqual('/projects/', self._chemin(local))
+        externe = self.client.get('/login?next=https://evil.test')
+        self.assertEqual(302, externe.status_code)
+        self.assertEqual('/', self._chemin(externe))
+
+    # ------------------------------------------------------------------
+    # 9. Attributs de sécurité et durée du cookie persistant
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _entetes_cookie(reponse, nom):
+        """En-têtes Set-Cookie concernant uniquement le cookie ``nom``."""
+        return [
+            valeur for valeur in reponse.headers.getlist('Set-Cookie')
+            if valeur.startswith(nom + '=')
+        ]
+
+    def test_cookie_remember_est_sur_30_jours_httponly_et_lax(self):
+        username, _email = self._creer_utilisateur()
+        reponse = self.app.test_client().post(
+            '/login', data=self._donnees_connexion(username, remember=True)
+        )
+        self.assertEqual(302, reponse.status_code)
+        attent = self._entetes_cookie(reponse, 'remember_token')
+        self.assertEqual(1, len(attent), msg=attent)
+        entete = attent[0]
+        # Flask-Login fixe l'expiration avec ``Expires`` (Werkzeug n'ajoute
+        # pas ``Max-Age`` ici). Le navigateur supprime donc le cookie à cette
+        # date, soit 30 jours après la connexion.
+        correspondance = re.search(r'Expires=([^;]+)', entete)
+        self.assertIsNotNone(correspondance, msg=entete)
+        expiration = parsedate_to_datetime(correspondance.group(1).strip())
+        if expiration.tzinfo is None:
+            expiration = expiration.replace(tzinfo=timezone.utc)
+        ecart = (expiration - datetime.now(timezone.utc)).total_seconds()
+        self.assertLessEqual(abs(ecart - 30 * 24 * 3600), 300, msg=entete)
+        self.assertIn('HttpOnly', entete)
+        self.assertIn('SameSite=Lax', entete)
+        self.assertIn('Path=/', entete)
+        # En environnement de test (HTTP), le cookie n'est pas « Secure » ;
+        # la configuration de production, elle, l'exige.
+        self.assertNotIn('Secure', entete)
+        self.assertEqual(
+            timedelta(days=30), self.app.config['REMEMBER_COOKIE_DURATION']
+        )
+        self.assertTrue(ProductionConfig.REMEMBER_COOKIE_SECURE)
+        self.assertEqual('Lax', ProductionConfig.REMEMBER_COOKIE_SAMESITE)
+
+    # ------------------------------------------------------------------
+    # 10. Sans case cochée : session temporaire uniquement
+    # ------------------------------------------------------------------
+    def test_sans_case_cochee_pas_de_cookie_persistant(self):
+        username, _email = self._creer_utilisateur()
+        client = self.app.test_client()
+        connexion = client.post(
+            '/login', data=self._donnees_connexion(username)
+        )
+        self.assertEqual(302, connexion.status_code)
+        self.assertEqual(
+            [], self._entetes_cookie(connexion, 'remember_token')
+        )
+
+        # Même après une requête suivante, aucun cookie persistant ne doit
+        # être déposé : REMEMBER_COOKIE_REFRESH_EACH_REQUEST est désactivé.
+        accueil = client.get('/')
+        self.assertEqual(200, accueil.status_code)
+        self.assertEqual([], self._entetes_cookie(accueil, 'remember_token'))
+
+        # Fermeture du navigateur = cookie de session perdu : il faut se
+        # reconnecter.
+        client_reouvert = self.app.test_client()
+        redirection = client_reouvert.get('/')
+        self.assertEqual(302, redirection.status_code)
+        self.assertEqual('/login', self._chemin(redirection))
+
+    # ------------------------------------------------------------------
+    # 11. Déconnexion : le cookie de mémorisation est supprimé
+    # ------------------------------------------------------------------
+    def test_deconnexion_supprime_le_cookie_remember(self):
+        username, _email = self._creer_utilisateur()
+        client = self.app.test_client()
+        connexion = client.post(
+            '/login', data=self._donnees_connexion(username, remember=True)
+        )
+        self.assertIsNotNone(
+            self._valeur_cookie(connexion, 'remember_token')
+        )
+
+        deconnexion = client.get('/logout')
+        self.assertEqual(302, deconnexion.status_code)
+        suppressions = self._entetes_cookie(deconnexion, 'remember_token')
+        self.assertEqual(1, len(suppressions), msg=suppressions)
+        self.assertTrue(
+            'Max-Age=0' in suppressions[0]
+            or '01 Jan 1970' in suppressions[0],
+            msg=suppressions[0],
+        )
+        self.assertIsNone(client.get_cookie('remember_token'))
+        self.assertEqual(302, client.get('/').status_code)
+
+    # ------------------------------------------------------------------
+    # 12. Expiration du cookie (30 jours) : nouvelle authentification
+    # ------------------------------------------------------------------
+    def test_cookie_expire_force_nouvelle_authentification(self):
+        username, _email = self._creer_utilisateur()
+        connexion = self.app.test_client().post(
+            '/login', data=self._donnees_connexion(username, remember=True)
+        )
+        jeton = self._valeur_cookie(connexion, 'remember_token')
+        self.assertIsNotNone(jeton)
+
+        client_reouvert = self.app.test_client()
+        client_reouvert.set_cookie('remember_token', jeton)
+        self.assertEqual(200, client_reouvert.get('/').status_code)
+
+        # Arrivé à ``Expires``, le navigateur supprime le cookie. Un client
+        # sans ce cookie ne peut plus restaurer la session : il doit se
+        # reconnecter (la session volatile du client précédent ne compte pas).
+        client_apres_expiration = self.app.test_client()
+        self.assertIsNone(client_apres_expiration.get_cookie('remember_token'))
+        redirection = client_apres_expiration.get('/')
+        self.assertEqual(302, redirection.status_code)
+        self.assertEqual('/login', self._chemin(redirection))
 
 
 if __name__ == '__main__':
