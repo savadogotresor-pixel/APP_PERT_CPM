@@ -55,7 +55,9 @@ Lecture du schéma :
 | `app.py` | Fabrique l'application Flask, charge la configuration, initialise les extensions, enregistre les blueprints, définit `ProxyFix`, les en-têtes de sécurité, la journalisation stdout, les routes historiques et les gestionnaires d'erreurs (413, 404, 500, exceptions non prévues). |
 | `config.py` | `Config` (développement), `ProductionConfig` (secrets obligatoires, cookies sûrs), `TestConfig` (SQLite mémoire, CSRF désactivé). Normalise `postgres://` en `postgresql://`. |
 | `extensions.py` | Instances partagées `db` (SQLAlchemy), `login_manager` (Flask-Login), `csrf` (Flask-WTF). |
-| `models.py` | Entités `User`, `Project`, `Task`, `Dependency`, `ProjectAccess`, `Scenario`, `AuditLog` ; hachage des mots de passe ; `project_to_taches()` ; `user_can_access()` ; `init_db()` (`db.create_all()`). |
+| `models.py` | Entités `User`, `Project`, `Task`, `Dependency`, `ProjectAccess`, `Scenario`, `AuditLog`, `AlerteRisque` ; hachage des mots de passe ; `project_to_taches()` ; `user_can_access()` ; `init_db()` (`db.create_all()` + migration idempotente de la vérification e-mail). |
+| `sql/schema.sql` | Schéma SQL SQLite généré depuis `models.py` (8 tables, index et contraintes). Référence de la structure ; la production utilise le même schéma via PostgreSQL et `DATABASE_URL`. |
+| `scripts/init_db.py` | Crée/migre la base de façon idempotente en respectant `APP_SETTINGS` et `DATABASE_URL`, puis affiche le chemin et le nombre de lignes par table. |
 | `routes_auth.py` | Blueprint `auth` : inscription, connexion, déconnexion, profil, endpoint public `/auth/public-key` ; validation serveur, messages génériques, filtrage de `next` contre les redirections ouvertes, lecture des mots de passe chiffrés ou en clair. L'e-mail est l'identifiant unique : `username` est facultatif et généré depuis l'e-mail ; un e-mail existant redirige vers la connexion ou la vérification sans créer de doublon. |
 | `crypto_rsa.py` | Chiffrement des identifiants : initialisation idempotente de la clé (variable d'environnement ou clé générée en mémoire), PEM SPKI public, déchiffrement RSA-OAEP-SHA256. La clé privée n'est ni exposée ni journalisée. |
 | `routes_projects.py` | Blueprint `projects` (préfixe `/projects`) : CRUD projets/tâches, archivage, import/export, rapport PDF, scénarios d'optimisation, journalisation des actions. |
@@ -289,7 +291,7 @@ python app.py
 APP_SETTINGS=config.Config FLASK_DEBUG=1 python app.py
 ```
 
-Ouvrir <http://127.0.0.1:5000>. Par défaut, la base est `instance/pert_cpm.db` (Flask-SQLAlchemy place les URI SQLite relatives dans le dossier `instance/`). Pour utiliser la configuration de production en local, définir **obligatoirement** `SECRET_KEY` et `DATABASE_URL` puis `APP_SETTINGS=config.ProductionConfig`.
+Ouvrir <http://127.0.0.1:5000>. Par défaut, la base est `instance/pert_cpm.db` (Flask-SQLAlchemy place les URI SQLite relatives dans le dossier `instance/`). Pour créer ou migrer explicitement cette base sans lancer le serveur : `python scripts/init_db.py`. Le schéma de référence est `sql/schema.sql`. Pour utiliser la configuration de production en local, définir **obligatoirement** `SECRET_KEY` et `DATABASE_URL` puis `APP_SETTINGS=config.ProductionConfig`.
 
 Serveur WSGI (production) : `gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120`.
 
@@ -471,3 +473,7 @@ Le formulaire `auth/register.html` ne rend plus `username` obligatoire : l'e-mai
 ### 20.6 Visualisations avancées
 
 `static/graphiques.js` génère cinq graphiques SVG natifs sans dépendance externe : histogrammes des durées et des marges totales, donut de criticité, nuage de points durée/marge et barres ES/EF/LS/LF. `DONNEES_GRAPHiques` est injecté via `tojson` à partir de `taches`, `resultats` et `chemins_critiques` dans `templates/resultats.html` **et dans `templates/catalogue/detail.html`** ; dans ce dernier, les trois clés proviennent de `taches_affichees`, `resultat.resultats` et `resultat.chemins_critiques`, donc des tâches ajoutées à l'exemplaire personnel. L'API `window.Graphiques.generer(nom)` / `genererTous()` pilote la génération à la demande (cases `data-graphique` = `durees`, `marges`, `criticite`, `nuage`, `calendrier` ; conteneur `id="graphiques-resultats"` et invitation `id="graphiques-invite"`). Les huit blocs `<script>` historiques de `resultats.html` sont inchangés ; `static/graphiques.css` est chargé avant `design.css`, qui reste le dernier `<link>` de chaque gabarit.
+
+### 20.7 Design responsive PC / tablette / Android
+
+`static/design.css` contient une section « RESPONSIVE MULTI-APPAREILS » sans CDN : breakpoints 640 / 768 / 1024 / 1200 px, grille utilitaire `.container-fluid`, `.row`, `.col-sm-6`, `.col-md-4/6`, `.col-lg-3/4/6`, cibles tactiles `--touch-cible: 44px`, `@media (pointer: coarse)` et `env(safe-area-inset-*)`. Sur tablette, `.card-grid`, `.form-grid` et `.stat-grid` passent en deux colonnes ; sur smartphone, une seule colonne et navigation horizontale défilante (`.topbar-nav` avec `overflow-x: auto`, `scroll-snap-type` et barre de défilement masquée). Les tableaux restent dans un `.table-wrapper` défilant. Aucun Bootstrap n'est chargé depuis un CDN : la grille est locale, ce qui préserve le mode hors ligne PWA et évite un reset global susceptible de casser les ids historiques (`contenu-export`, `graphe`, `gantt`, `fiche-*`, `alerte_id`, `statut`, `confirmer`, `duree_*`). `tests/test_responsive.py` vérifie le viewport de tous les gabarits complets, l'ordre des feuilles de style, l'absence de Bootstrap distant et la présence des breakpoints.

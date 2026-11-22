@@ -255,3 +255,13 @@ Le code n'est jamais stocké en clair ni affiché une seconde fois. Si aucun ser
 ### 8.6 Visualisations avancées
 
 La section **📈 Representations avancées** est disponible sur la page de résultats **et sur la fiche d'un projet du catalogue** (§8.1). Elle permet de générer à la demande cinq graphiques SVG : histogramme des durées, histogramme des marges totales, diagramme circulaire critiques / non critiques, nuage de points durée ↔ marge et barres ES/EF/LS/LF. Cochez les graphiques souhaités puis cliquez sur **Générer les visualisations**. Tout est dessiné dans le navigateur à partir des chiffres du moteur PERT : aucun service externe n'est appelé et le graphe PERT, le Gantt et les exports restent inchangés. Sur la fiche catalogue, les graphiques utilisent les **tâches affichées** : ils reflètent donc immédiatement les tâches ajoutées à l'exemplaire personnel, sans jamais toucher aux 12 modèles figés.
+
+### 8.7 Utilisation sur PC, tablette et smartphone
+
+L'interface s'adapte automatiquement à la largeur de votre écran :
+
+- **PC (≥ 1024 px)** : mise en page large, plusieurs colonnes, navigation complète ;
+- **Tablette (641–1024 px)** : deux colonnes lisibles, boutons et tableaux conservés ;
+- **Smartphone Android / iOS (≤ 640 px)** : une seule colonne, navigation horizontale défilante dans la barre supérieure, boutons d'au moins 44 px et champs en 16 px pour éviter le zoom automatique.
+
+Les tableaux se font défiler horizontalement au toucher et les graphiques restent dans une grille d'une colonne sur téléphone. Aucune bibliothèque Bootstrap n'est téléchargée : la grille utilitaire `.row` / `.col-*` et les breakpoints sont intégrés localement dans `design.css`, afin que l'application reste utilisable hors ligne.
