@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from extensions import db
 from logic.pert import ValidationError, compute
-from models import AuditLog, Dependency, Project, Task
+from models import AuditLog, Dependency, Project, Task, project_to_taches
 
 
 def _t(description, duree, *depend_de):
@@ -336,6 +336,65 @@ def get_projet(projet_id):
     return None
 
 
+def description_import(modele):
+    """Description d'une copie personnelle, avec un marqueur stable et unique."""
+    return (
+        f"{modele['description']} [catalogue:{modele['id']}] "
+        "(exemplaire personnel importé du catalogue PERT/CPM)"
+    )
+
+
+def _description_import_legacy(modele):
+    """Description produite par les versions précédentes de ``optimiser``."""
+    return (
+        f"{modele['description']} (catalogue : {modele['categorie']}, "
+        "importé sans modification des durées)"
+    )
+
+
+def trouver_copie(projet_id, user_id):
+    """Retourne l'exemplaire personnel le plus récent d'un modèle, ou ``None``."""
+    modele = get_projet(projet_id)
+    if modele is None:
+        return None
+
+    marqueur = f"[catalogue:{modele['id']}]"
+    copie = (
+        Project.query.filter(
+            Project.user_id == user_id,
+            Project.description.like(f"%{marqueur}%"),
+        )
+        .order_by(Project.id.desc())
+        .first()
+    )
+    if copie is not None:
+        return copie
+
+    # Compatibilité avec les copies créées avant l'ajout du marqueur stable.
+    return (
+        Project.query.filter(
+            Project.user_id == user_id,
+            Project.name == modele['titre'],
+            Project.description == _description_import_legacy(modele),
+        )
+        .order_by(Project.id.desc())
+        .first()
+    )
+
+
+def prochain_code(taches):
+    """Premier code libre A..Z, puis ``T<n>`` au-delà de 26 tâches."""
+    utilises = {str(code) for code in taches}
+    for valeur in range(26):
+        code = chr(ord('A') + valeur)
+        if code not in utilises:
+            return code
+    numero = 1
+    while f"T{numero}" in utilises:
+        numero += 1
+    return f"T{numero}"
+
+
 def optimiser(projet_id, user_id):
     """Crée le projet, ses tâches et ses dépendances dans le compte *user_id*.
 
@@ -353,10 +412,7 @@ def optimiser(projet_id, user_id):
     projet = Project(
         user_id=user_id,
         name=titre,
-        description=(
-            f"{modele['description']} (catalogue : {modele['categorie']}, "
-            f"importé sans modification des durées)"
-        ),
+        description=description_import(modele),
         status='actif',
     )
     db.session.add(projet)
@@ -406,3 +462,106 @@ def optimiser(projet_id, user_id):
         db.session.rollback()
 
     return projet
+
+
+def ajouter_tache(projet_id, user_id, code, description, duree, predecesseurs):
+    """Ajoute une tâche validée à l'exemplaire personnel d'un modèle.
+
+    Le modèle du catalogue n'est jamais modifié : la tâche est enregistrée dans
+    une copie appartenant à *user_id*, créée au besoin par :func:`optimiser`.
+    Le graphe complet est recalculé par ``logic.pert.compute`` avant toute
+    écriture, afin de refuser codes dupliqués, prédécesseurs inconnus et cycles.
+    """
+    modele = get_projet(projet_id)
+    if modele is None:
+        raise ValueError(f"Projet du catalogue introuvable : {projet_id!r}")
+
+    code = str(code or '').strip()
+    if not code:
+        raise ValueError("Le code de la tâche est obligatoire.")
+    if len(code) > 20:
+        raise ValueError("Le code de la tâche ne peut pas dépasser 20 caractères.")
+    if ',' in code:
+        raise ValueError("Le code de la tâche ne peut pas contenir de virgule.")
+
+    try:
+        duree = int(duree)
+    except (TypeError, ValueError):
+        raise ValueError(
+            "La durée doit être un entier supérieur ou égal à 0."
+        ) from None
+    if duree < 0:
+        raise ValueError("La durée doit être un entier supérieur ou égal à 0.")
+
+    predecesseurs_utiles = []
+    for morceau in str(predecesseurs or '').split(','):
+        predecesseur = morceau.strip()
+        if predecesseur and predecesseur not in predecesseurs_utiles:
+            predecesseurs_utiles.append(predecesseur)
+
+    copie = trouver_copie(projet_id, user_id)
+    graphe = project_to_taches(copie) if copie is not None else dict(modele['taches'])
+
+    if code in graphe:
+        raise ValueError(f"Le code « {code} » existe déjà dans ce projet.")
+    for predecesseur in predecesseurs_utiles:
+        if predecesseur == code:
+            raise ValueError("Une tâche ne peut pas dépendre d'elle-même.")
+        if predecesseur not in graphe:
+            raise ValueError(
+                f"Le prédécesseur « {predecesseur} » n'existe pas dans ce projet."
+            )
+
+    graphe[code] = {
+        'description': str(description or '').strip(),
+        'duree': duree,
+        'depend_de': predecesseurs_utiles,
+    }
+    try:
+        resultat = compute(graphe)
+    except ValidationError as exc:
+        lignes = [ligne.strip() for ligne in str(exc).split('\n') if ligne.strip()]
+        raise ValueError('\n'.join(lignes) or "Graphe PERT invalide.") from exc
+
+    if copie is None:
+        copie = optimiser(projet_id, user_id)
+
+    par_code = {tache.code: tache for tache in copie.tasks}
+    if code in par_code:
+        raise ValueError(f"Le code « {code} » existe déjà dans ce projet.")
+
+    tache = Task(
+        project_id=copie.id,
+        code=code,
+        description=graphe[code]['description'],
+        duree=duree,
+    )
+    db.session.add(tache)
+    db.session.flush()
+    for predecesseur in predecesseurs_utiles:
+        db.session.add(
+            Dependency(
+                successor_id=tache.id,
+                predecessor_id=par_code[predecesseur].id,
+                type_relation='FS',
+            )
+        )
+    db.session.commit()
+
+    details = (
+        f"Catalogue « {modele['id']} » : tâche « {code} » ajoutée à l'exemplaire "
+        f"de {user_id} — durée PERT de {resultat.duree_totale} jour(s)."
+    )
+    try:
+        db.session.add(
+            AuditLog(
+                user_id=user_id,
+                action='CATALOGUE_TACHE_AJOUTEE',
+                details=details,
+            )
+        )
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+    return copie, resultat, tache

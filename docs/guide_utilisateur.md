@@ -213,6 +213,17 @@ Connectez-vous d'abord : le lien **🧰 Catalogue** n'apparaît dans la barre de
 
 Cliquez sur **Voir le projet** pour ouvrir la fiche `/catalogue/<id>` : vous y voyez le résumé, le tableau des calculs et le chemin critique, recalculés par le moteur PERT/CPM. Sur la fiche, le bouton **🚀 Optimiser ce projet** crée une **copie du modèle dans votre propre compte** avec les durées d'origine, puis ouvre directement la page de simulation d'optimisation. Le modèle d'origine et le planning de référence ne sont pas modifiés : les réductions ne sont que simulées tant que vous ne les appliquez pas explicitement.
 
+#### Ajouter une tâche depuis la fiche
+
+La section **➕ Ajouter une tâche à mon exemplaire** permet d'enrichir le planning directement depuis la fiche d'un modèle. Le parcours est le suivant :
+
+1. Saisissez le **code** (unique, 20 caractères maximum, sans virgule), la **description**, la **durée** (entier ≥ 0, `0` = jalon) et les **prédécesseurs** (codes séparés par des virgules, ou vide). Le code proposé par défaut est le premier code libre.
+2. Cliquez sur **Ajouter la tâche**. Le graphe complet est validé par le moteur PERT/CPM avant enregistrement : code déjà utilisé, prédécesseur inconnu, auto-dépendance, cycle ou durée invalide sont refusés avec un message lisible, et **rien n'est enregistré**. Les valeurs saisies restent dans le formulaire pour vous permettre de corriger.
+
+Au premier ajout, une copie est créée **automatiquement dans votre compte** : c'est votre **exemplaire personnel**, repéré par la mention `[catalogue:<id>]` et signalé par le badge **Exemplaire personnel** sur la fiche. Un lien **Ouvrir mon projet** mène alors à la fiche `projects.detail` de cet exemplaire. Les ajouts suivants réutilisent toujours le même exemplaire — jamais une nouvelle copie. Le bouton **🚀 Optimiser ce projet** reprend lui aussi cet exemplaire enrichi, afin que vos tâches ajoutées ne soient pas perdues.
+
+**Les 12 modèles du catalogue ne sont jamais modifiés** : ni leurs durées, ni leurs dépendances, ni leur nombre de tâches. La durée totale, le chemin critique, le tableau et les graphiques affichés sur la fiche sont recalculés depuis l'exemplaire personnel (tâches ajoutées comprises) par le moteur PERT/CPM. Un message de confirmation indique la nouvelle durée après chaque ajout réussi.
+
 ### 8.2 Conseils IA maison automatiques
 
 Une section **💡 Conseils de l'IA maison** s'affiche automatiquement sous les résultats de la démo (`/demo`), de votre saisie (`/resultats_custom`) et de la page d'optimisation d'un projet. Elle est distincte des « Conseils d'optimisation » historiques décrits au §4.2.
@@ -237,4 +248,4 @@ Le code n'est jamais stocké en clair ni affiché une seconde fois. Si aucun ser
 
 ### 8.6 Visualisations avancées
 
-Sur la page de résultats, la section **📈 Representations avancées** permet de générer à la demande cinq graphiques SVG : histogramme des durées, histogramme des marges totales, diagramme circulaire critiques / non critiques, nuage de points durée ↔ marge et barres ES/EF/LS/LF. Cochez les graphiques souhaités puis cliquez sur **Générer les visualisations**. Tout est calculé dans le navigateur à partir des chiffres du moteur PERT : aucun service externe n'est appelé et le graphe PERT, le Gantt et les exports restent inchangés.
+La section **📈 Representations avancées** est disponible sur la page de résultats **et sur la fiche d'un projet du catalogue** (§8.1). Elle permet de générer à la demande cinq graphiques SVG : histogramme des durées, histogramme des marges totales, diagramme circulaire critiques / non critiques, nuage de points durée ↔ marge et barres ES/EF/LS/LF. Cochez les graphiques souhaités puis cliquez sur **Générer les visualisations**. Tout est dessiné dans le navigateur à partir des chiffres du moteur PERT : aucun service externe n'est appelé et le graphe PERT, le Gantt et les exports restent inchangés. Sur la fiche catalogue, les graphiques utilisent les **tâches affichées** : ils reflètent donc immédiatement les tâches ajoutées à l'exemplaire personnel, sans jamais toucher aux 12 modèles figés.

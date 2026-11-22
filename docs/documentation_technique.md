@@ -69,7 +69,7 @@ Lecture du schéma :
 | `services/optimisation.py` | `simuler()` : deux calculs déterministes (initial et copie modifiée), gains, hypothèses, limites ; aucune écriture en base. |
 | `services/rapport.py` | `generer_rapport_pdf()` : rapport A4 paysage en deux pages, tableau détaillé, réseau PERT et Gantt générés avec matplotlib (`Agg`), texte extractible et échappé. |
 | `templates/`, `static/` | Gabarits Jinja2 (historiques, `auth/`, `projects/`, `admin/`) et feuilles de style ; `static/auth_rsa.js` chiffre le mot de passe dans le navigateur avant soumission. |
-| `tests/` | 86 tests `unittest` : moteur, parseur, HTTP, auth/projets, modèles, import/export, optimisation, rapport PDF. |
+| `tests/` | Tests `unittest` : moteur, parseur, HTTP, auth/projets, modèles, catalogue (`test_catalogue.py`), import/export, optimisation, rapport PDF. |
 | `scripts/backup.py`, `scripts/restore.py` | Sauvegarde et restauration SQLite (voir `docs/sauvegarde.md`). |
 | `requirements.txt`, `docs/` | Dépendances figées et documentation fonctionnelle/opérationnelle. |
 
@@ -305,7 +305,7 @@ Sous Windows avec l'interpréteur Anaconda :
 & 'C:\Users\ASUS\anaconda3\python.exe' -m unittest discover -s tests -v
 ```
 
-La suite compte **86 tests** répartis dans `test_pert.py`, `test_parser.py`, `test_app.py`, `test_models.py`, `test_auth_projects.py`, `test_import_export.py`, `test_optimisation.py` et `test_rapport.py`. `TestConfig` utilise une base SQLite en mémoire et désactive CSRF ; les tests HTTP d'authentification positionnent `APP_SETTINGS` avant d'importer `app`. Un test ciblé s'exécute avec `python -m unittest tests.test_pert -v`. Le détail des cas figure dans `docs/recette.md`.
+La suite couvre le moteur, le parseur, les routes HTTP, l'authentification, les projets, les modèles, le catalogue (`tests/test_catalogue.py`), l'import/export, l'optimisation et le rapport PDF. `TestConfig` utilise une base SQLite en mémoire et désactive CSRF ; les tests du catalogue réactivent `WTF_CSRF_ENABLED` et extraient le jeton des formulaires. Les tests HTTP d'authentification positionnent `APP_SETTINGS` avant d'importer `app`. Un test ciblé s'exécute avec `python -m unittest tests.test_pert -v` ou, pour le catalogue, `python -m unittest tests.test_catalogue -v`. Le détail des cas figure dans `docs/recette.md`.
 
 ## 7. Flux de calcul PERT
 
@@ -362,7 +362,7 @@ Points de vigilance : la limitation des tentatives de connexion prévue au §11 
 2. **Sauvegarder** : exécuter la procédure de `docs/sauvegarde.md` (base SQLite ou `pg_dump` PostgreSQL) et consigner le fichier dans le registre.
 3. **Récupérer le code** : `git fetch && git checkout <sha>` (ou merge de la branche validée) ; lire les notes de version.
 4. **Installer** : `pip install -r requirements.txt` (ou laisser Render reconstruire le service).
-5. **Tester** : `python -m unittest discover -s tests -v` ; les 86 tests doivent passer. Compléter par la recette de `docs/recette.md` si le changement touche aux calculs, aux droits ou aux exports.
+5. **Tester** : `python -m unittest discover -s tests -v` ; tous les tests doivent passer, y compris `python -m unittest tests.test_catalogue -v` pour l'ajout de tâches au catalogue. Compléter par la recette de `docs/recette.md` si le changement touche aux calculs, aux droits ou aux exports.
 6. **Schéma** : au démarrage, `init_db(app)` appelle `db.create_all()` ; les tables manquantes sont créées. Pour modifier une colonne existante, écrire un script SQL versionné et l'appliquer **avant** le redéploiement (aucun outil de migrations tel qu'Alembic n'est installé à ce jour).
 7. **Déployer** : pousser le commit sur la branche configurée dans Render ou relancer le déploiement manuel ; surveiller les journaux de build et de démarrage.
 8. **Vérifier** : `GET /health`, connexion, ouverture d'un projet, calcul, export PDF, puis contrôle des erreurs dans `/admin/journal`. En cas d'échec, appliquer la procédure de rollback de `docs/deploiement.md`.
@@ -424,12 +424,21 @@ Le blueprint `catalogue` (`routes_catalogue.py`, préfixe `/catalogue`) expose :
 | Méthode | Chemin | Accès | Comportement |
 |---|---|---|---|
 | GET | `/catalogue/` | connecté | Liste des 12 projets avec durée calculée par `compute` et statistiques (nombre de projets, de catégories, durée moyenne). |
-| GET | `/catalogue/<projet_id>` | connecté | Fiche : résumé, tableau PERT et chemin critique recalculés ; 404 pour un identifiant inconnu. |
+| GET | `/catalogue/<projet_id>` | connecté | Fiche : résumé, tableau PERT, chemin critique et visualisations avancées recalculés ; 404 pour un identifiant inconnu. |
+| POST | `/catalogue/<projet_id>/taches` | connecté | Ajout d'une tâche à l'exemplaire personnel (`catalogue.ajouter_tache`), protégé par le jeton CSRF global. |
 | POST | `/catalogue/<projet_id>/optimiser` | connecté | Bouton « 🚀 Optimiser ce projet » : copie du modèle dans le compte courant puis ouverture de la simulation. |
 
-Les trois routes portent `@login_required` : un anonyme est redirigé (302) vers `/login?next=%2Fcatalogue%2F`, ou vers `/login?next=%2Fcatalogue%2F<projet_id>` pour une fiche. Le lien **🧰 Catalogue** n'apparaît dans la navigation qu'une fois connecté ; les liens **Démo** et **Saisie** en ont été retirés.
+Les quatre routes portent `@login_required` : un anonyme est redirigé (302) vers `/login?next=%2Fcatalogue%2F`, ou vers `/login?next=%2Fcatalogue%2F<projet_id>` pour une fiche. Le lien **🧰 Catalogue** n'apparaît dans la navigation qu'une fois connecté ; les liens **Démo** et **Saisie** en ont été retirés.
 
-La copie est créée par `catalogue_logic.optimiser(projet_id, user_id)` : `Project`, `Task` et `Dependency` sont inscrits en base **dans le compte de l'utilisateur connecté avec les durées d'origine**, sans optimisation numérique ; un `AuditLog(action='CATALOGUE_OPTIMISE')` est ajouté si le journal est disponible. La redirection mène à `projects.optimisation` pour simuler des réductions ; le planning de référence n'est pas modifié sans action explicite. Le POST exige `login_required` et le jeton CSRF global.
+La copie est créée par `catalogue_logic.optimiser(projet_id, user_id)` : `Project`, `Task` et `Dependency` sont inscrits en base **dans le compte de l'utilisateur connecté avec les durées d'origine**, sans optimisation numérique ; un `AuditLog(action='CATALOGUE_OPTIMISE')` est ajouté si le journal est disponible. La redirection mène à `projects.optimisation` pour simuler des réductions ; le planning de référence n'est pas modifié sans action explicite.
+
+#### Ajout de tâches et exemplaire personnel
+
+`catalogue_logic.ajouter_tache(projet_id, user_id, code, description, duree, predecesseurs)` valide les champs (code non vide, ≤ 20 caractères, sans virgule, unique ; durée entière ≥ 0 ; prédécesseurs dédupliqués, existants, sans auto-dépendance), reconstruit le graphe complet et appelle **uniquement** `logic.pert.compute` : une `ValidationError` (cycle, dépendance inconnue) est convertie en `ValueError` lisible. Aucune écriture n'a lieu avant la fin de cette validation. La copie est créée par `optimiser()` si elle n'existe pas déjà, puis la `Task` et ses `Dependency` sont inscrites et un `AuditLog(action='CATALOGUE_TACHE_AJOUTEE')` est ajouté. La route renvoie `(copie, resultat, tache)` au template via un flash et une redirection vers `catalogue.detail` avec l'ancre `#ajout-tache` ; en cas d'erreur, la fiche est réaffichée (HTTP 200) avec `erreurs` et les `valeurs` saisies conservées.
+
+Les copies sont retrouvables grâce à `description_import(modele)`, qui inclut le marqueur stable `[catalogue:<id>]` ; `trouver_copie(projet_id, user_id)` reconnaît aussi l'ancienne description produite par `optimiser()` et retourne la copie la plus récente. `prochain_code(taches)` propose le premier code libre A..Z, puis `T<n>`. Un second ajout réutilise donc **la même copie** ; la route `catalogue.optimiser` fait de même lorsqu'un exemplaire existe déjà, pour ne pas écraser les tâches ajoutées. **Les 12 modèles de `CATALOGUE` ne sont jamais mutés** : ni durées, ni dépendances, ni tâches.
+
+`_rendre_detail()` passe au gabarit `projet`, `resultat`, `taches_affichees` (`project_to_taches(copie)` si une copie existe, sinon `projet['taches']`), `copie`, `est_personnalise`, `valeurs` et `erreurs`. Le tableau, la durée, le chemin critique et `window.DONNEES_GRAPHiques` sont tous construits depuis `taches_affichees` et le `resultat` recalculé : la fiche reflète toujours les tâches ajoutées. Le badge **Exemplaire personnel** et le lien vers `projects.detail` n'apparaissent que lorsque `copie` existe. Le POST exige `login_required` et le jeton CSRF global.
 
 `/demo` et `/saisie` restent joignables par URL directe (et depuis les boutons de l'accueil), mais aucun lien vers ces pages ni vers le catalogue n'est affiché dans la navigation d'un anonyme.
 
@@ -457,4 +466,4 @@ Les cases `remember` des gabarits `auth/login.html` et `auth/register.html` sont
 
 ### 20.6 Visualisations avancées
 
-`static/graphiques.js` génère cinq graphiques SVG natifs sans dépendance externe : histogrammes des durées et des marges totales, donut de criticité, nuage de points durée/marge et barres ES/EF/LS/LF. `DONNEES_GRAPHiques` est injecté depuis `templates/resultats.html` via `tojson` à partir de `taches`, `resultats` et `chemins_critiques` ; l'API `window.Graphiques.generer(nom)` / `genererTous()` pilote la génération à la demande. Les huit blocs `<script>` historiques sont inchangés ; `static/graphiques.css` est chargé avant `design.css`, qui reste le dernier `<link>`.
+`static/graphiques.js` génère cinq graphiques SVG natifs sans dépendance externe : histogrammes des durées et des marges totales, donut de criticité, nuage de points durée/marge et barres ES/EF/LS/LF. `DONNEES_GRAPHiques` est injecté via `tojson` à partir de `taches`, `resultats` et `chemins_critiques` dans `templates/resultats.html` **et dans `templates/catalogue/detail.html`** ; dans ce dernier, les trois clés proviennent de `taches_affichees`, `resultat.resultats` et `resultat.chemins_critiques`, donc des tâches ajoutées à l'exemplaire personnel. L'API `window.Graphiques.generer(nom)` / `genererTous()` pilote la génération à la demande (cases `data-graphique` = `durees`, `marges`, `criticite`, `nuage`, `calendrier` ; conteneur `id="graphiques-resultats"` et invitation `id="graphiques-invite"`). Les huit blocs `<script>` historiques de `resultats.html` sont inchangés ; `static/graphiques.css` est chargé avant `design.css`, qui reste le dernier `<link>` de chaque gabarit.

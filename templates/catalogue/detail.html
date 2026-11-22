@@ -18,7 +18,17 @@
             gap: 1rem; margin: 1.5rem 0;
         }
         .catalogue-action p { margin: 0; }
+        .catalogue-personnel {
+            margin-bottom: 1rem; padding: .75rem 1rem;
+            border: 1px solid #c7d2fe; border-radius: var(--radius-sm, 8px);
+            background: #eef2ff; color: #3730a3;
+        }
+        .catalogue-personnel p { margin: 0; }
+        .catalogue-erreurs { margin: .5rem 0 0; padding-left: 1.25rem; }
+        .catalogue-erreurs li { margin-bottom: .25rem; }
+        .catalogue-codes { word-break: break-word; }
     </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='graphiques.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='design.css') }}">
 </head>
 <body>
@@ -37,6 +47,10 @@
     </header>
 
     <main class="container">
+        {% set valeurs = valeurs|default({}) %}
+        {% set erreurs = erreurs|default([]) %}
+        {% set taches_affichees = taches_affichees|default(projet.taches) %}
+
         <ul class="breadcrumb">
             <li><a href="{{ url_for('catalogue.index') }}">🧰 Catalogue</a></li>
             <li>{{ projet.titre }}</li>
@@ -66,11 +80,24 @@
                     {% else %}
                     <span class="badge badge-warning">{{ projet.difficulte }}</span>
                     {% endif %}
-                    <span class="badge badge-muted">{{ projet.taches|length }} tâches</span>
+                    <span class="badge badge-muted">{{ taches_affichees|length }} tâches</span>
+                    {% if copie %}
+                    <span class="badge badge-primary">Exemplaire personnel</span>
+                    {% endif %}
                 </div>
             </div>
             <a class="btn btn-secondary" href="{{ url_for('catalogue.index') }}">← Tous les projets</a>
         </div>
+
+        {% if copie %}
+        <div class="catalogue-personnel">
+            <p>
+                <strong>Exemplaire personnel</strong> — vous consultez votre propre copie de ce modèle
+                (tâches ajoutées comprises). Les 12 modèles du catalogue restent inchangés.
+                {% if est_personnalise %}<a href="{{ url_for('projects.detail', project_id=copie.id) }}">Ouvrir mon projet →</a>{% endif %}
+            </p>
+        </div>
+        {% endif %}
 
         <div class="stat-grid mb-4">
             <div class="stat-card stat-card--primary">
@@ -85,8 +112,8 @@
             </div>
             <div class="stat-card stat-card--success">
                 <span class="stat-icon" aria-hidden="true">🧩</span>
-                <div class="stat-value">{{ projet.taches|length }}</div>
-                <div class="stat-label">Tâches du modèle</div>
+                <div class="stat-value">{{ taches_affichees|length }}</div>
+                <div class="stat-label">{{ 'Tâches de mon exemplaire' if copie else 'Tâches du modèle' }}</div>
             </div>
         </div>
 
@@ -125,7 +152,7 @@
                     </thead>
                     <tbody>
                         {% for code in resultat.ordre %}
-                        {% set tache = projet.taches[code] %}
+                        {% set tache = taches_affichees[code] %}
                         {% set r = resultat.resultats[code] %}
                         <tr class="{{ 'row-critical' if r.critique else '' }}">
                             <td><strong>{{ code }}</strong></td>
@@ -149,6 +176,110 @@
             </div>
         </section>
 
+        <section id="ajout-tache" class="card mb-4" aria-labelledby="ajout-tache-titre">
+            <div class="card-header">
+                <h2 id="ajout-tache-titre" class="card-title">➕ Ajouter une tâche à mon exemplaire</h2>
+            </div>
+            <div class="card-body">
+                <p class="text-muted">
+                    Le modèle du catalogue est partagé : une copie personnelle est créée automatiquement
+                    dans votre compte lors du premier ajout. Le planning est ensuite recalculé par le
+                    moteur PERT/CPM. Les durées et dépendances des 12 modèles ne sont jamais modifiées.
+                </p>
+
+                {% if erreurs %}
+                <div class="alert alert-danger" role="alert">
+                    <strong>La tâche n'a pas été ajoutée :</strong>
+                    <ul class="catalogue-erreurs">
+                        {% for erreur in erreurs %}
+                        <li>{{ erreur }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+
+                <form class="form-card" method="post" action="{{ url_for('catalogue.ajouter_tache', projet_id=projet.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="form-grid">
+                        <div class="field">
+                            <label for="catalogue-code">Code de la tâche *</label>
+                            <input id="catalogue-code" name="code" type="text" required maxlength="20"
+                                   value="{{ valeurs.get('code', '') }}" placeholder="Ex. N">
+                            <p class="field-hint">Code unique dans le projet, sans virgule (20 caractères maximum).</p>
+                        </div>
+                        <div class="field">
+                            <label for="catalogue-duree">Durée (jours) *</label>
+                            <input id="catalogue-duree" name="duree" type="number" min="0" step="1" required
+                                   value="{{ valeurs.get('duree', '1') }}" placeholder="1">
+                            <p class="field-hint">Entier supérieur ou égal à 0 (0 = jalon).</p>
+                        </div>
+                        <div class="field" style="grid-column: 1 / -1;">
+                            <label for="catalogue-description">Description</label>
+                            <textarea id="catalogue-description" name="description"
+                                      placeholder="Ex. : Réaliser les tests de recette">{{ valeurs.get('description', '') }}</textarea>
+                            <p class="field-hint">Texte libre : précisez le livrable attendu.</p>
+                        </div>
+                        <div class="field" style="grid-column: 1 / -1;">
+                            <label for="catalogue-predecesseurs">Prédécesseurs</label>
+                            <input id="catalogue-predecesseurs" name="predecesseurs" type="text"
+                                   value="{{ valeurs.get('predecesseurs', '') }}" placeholder="Ex. L, M">
+                            <p class="field-hint">
+                                Codes des tâches à terminer avant celle-ci, séparés par des virgules.
+                                Laissez vide si la tâche n'a aucun prédécesseur.
+                            </p>
+                            <p class="field-hint catalogue-codes">
+                                Codes existants : {{ taches_affichees|join(', ') }}
+                            </p>
+                        </div>
+                    </div>
+                    <div class="form-actions">
+                        <button class="btn btn-primary" type="submit">➕ Ajouter la tâche</button>
+                    </div>
+                </form>
+            </div>
+        </section>
+
+        <section id="visualisations-avancees" class="card graphiques-section" aria-labelledby="graphiques-titre">
+            <div class="card-header">
+                <h2 id="graphiques-titre" class="card-title section-title">📈 Representations avancées</h2>
+            </div>
+            <div class="card-body">
+                <p class="graphiques-intro">
+                    Choisissez les représentations à afficher, puis générez-les. Toutes les valeurs
+                    proviennent du calcul PERT/CPM des tâches ci-dessus (tâches ajoutées comprises) :
+                    aucune donnée n'est recalculée dans le navigateur.
+                </p>
+                <div class="graphiques-controles" role="group" aria-label="Sélection des graphiques à générer">
+                    <div class="checkbox-field">
+                        <input type="checkbox" id="graphique-durees" data-graphique="durees" value="durees" checked>
+                        <label for="graphique-durees">Histogramme des durées de tâches</label>
+                    </div>
+                    <div class="checkbox-field">
+                        <input type="checkbox" id="graphique-marges" data-graphique="marges" value="marges" checked>
+                        <label for="graphique-marges">Histogramme des marges totales</label>
+                    </div>
+                    <div class="checkbox-field">
+                        <input type="checkbox" id="graphique-criticite" data-graphique="criticite" value="criticite" checked>
+                        <label for="graphique-criticite">Répartition critiques / non critiques (donut)</label>
+                    </div>
+                    <div class="checkbox-field">
+                        <input type="checkbox" id="graphique-nuage" data-graphique="nuage" value="nuage" checked>
+                        <label for="graphique-nuage">Nuage de points durée vs marge totale</label>
+                    </div>
+                    <div class="checkbox-field">
+                        <input type="checkbox" id="graphique-calendrier" data-graphique="calendrier" value="calendrier" checked>
+                        <label for="graphique-calendrier">Barres ES / EF / LS / LF par tâche</label>
+                    </div>
+                </div>
+                <div class="actions-bar graphiques-actions">
+                    <button id="btn-generer-graphiques" class="btn btn-primary" type="button" onclick="Graphiques.genererTous()" aria-controls="graphiques-resultats">📈 Générer les visualisations</button>
+                </div>
+                <div id="graphiques-resultats" class="graphiques-grid" aria-live="polite">
+                    <p id="graphiques-invite" class="graphiques-invite">Cochez les graphiques souhaités, puis cliquez sur « Générer les visualisations ».</p>
+                </div>
+            </div>
+        </section>
+
         <section class="card catalogue-action">
             <div class="card-body">
                 <h2 class="card-title">🚀 Passer à l'optimisation</h2>
@@ -165,6 +296,13 @@
                 </form>
             </div>
         </section>
+
+        {# Données des visualisations avancées : le moteur PERT/CPM est l'unique source. #}
+        <script>
+            const DONNEES_GRAPHiques = {{ {'taches': taches_affichees, 'resultats': resultat.resultats, 'chemins': resultat.chemins_critiques}|tojson }};
+            window.DONNEES_GRAPHiques = DONNEES_GRAPHiques;
+        </script>
+        <script src="{{ url_for('static', filename='graphiques.js') }}"></script>
     </main>
 </div>
 </body>
