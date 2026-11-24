@@ -103,3 +103,12 @@ CREATE TABLE dependency (
 	FOREIGN KEY(successor_id) REFERENCES task (id) ON DELETE CASCADE, 
 	FOREIGN KEY(predecessor_id) REFERENCES task (id) ON DELETE CASCADE
 );
+
+-- Clé privée RSA persistée : elle doit rester secrète et ne jamais être
+-- exposée par une route ni versionnée dans Git.
+CREATE TABLE clef_crypto (
+	nom VARCHAR(50) NOT NULL, 
+	pem TEXT NOT NULL, 
+	cree_le DATETIME DEFAULT (CURRENT_TIMESTAMP), 
+	PRIMARY KEY (nom)
+);

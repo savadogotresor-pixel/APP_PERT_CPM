@@ -213,6 +213,22 @@ class AlerteRisque(db.Model):
     projet = db.relationship('Project', backref='alertes_risque')
 
 
+class ClefCrypto(db.Model):
+    """Clé privée RSA persistée dans la base SQL.
+
+    Sans ligne dédiée, une nouvelle clé était générée à chaque redémarrage :
+    les mots de passe chiffrés avec l'ancienne clé devenaient illisibles et
+    l'utilisateur croyait devoir recréer un compte. La clé reste secrète
+    (jamais exposée par une route, jamais journalisée, jamais versionnée).
+    """
+
+    __tablename__ = 'clef_crypto'
+
+    nom = db.Column(db.String(50), primary_key=True)
+    pem = db.Column(db.Text, nullable=False)
+    cree_le = db.Column(db.DateTime, server_default=func.now())
+
+
 def project_to_taches(project):
     """Convertit les tâches d'un projet au format attendu par le moteur PERT.
 

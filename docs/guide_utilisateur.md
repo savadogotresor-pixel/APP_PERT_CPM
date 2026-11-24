@@ -24,7 +24,7 @@ Une fois connecté, la barre de navigation donne accès à **🧰 Catalogue**, �
 
 ### 2.2 Connexion, chiffrement du mot de passe et mode hors ligne
 
-Sur `/login`, saisissez votre adresse e-mail (ou votre nom d'utilisateur) et votre mot de passe. **En ligne**, le navigateur récupère la clé publique sur `/auth/public-key` et chiffre le mot de passe (RSA-OAEP-SHA256) avant l'envoi dans le champ caché `password_chiffre` ; le serveur détient seul la clé privée. Le mot de passe est ensuite stocké sous forme de hachage.
+Sur `/login`, saisissez votre adresse e-mail (ou votre nom d'utilisateur) et votre mot de passe. **En ligne**, le navigateur récupère la clé publique sur `/auth/public-key` et chiffre le mot de passe (RSA-OAEP-SHA256) avant l'envoi dans le champ caché `password_chiffre` ; le serveur détient seul la clé privée. Le mot de passe est ensuite stocké sous forme de hachage. La clé privée est conservée dans la base SQL de l'application : un redémarrage du serveur ne vous oblige pas à recréer votre compte. Le lien **Mot de passe oublié ?** ouvre `/password/reset` si vous ne retrouvez pas votre mot de passe.
 
 ### 2.2 bis Création de compte avec l'e-mail seulement
 
@@ -253,6 +253,10 @@ Si vous êtes déjà connecté et que vous ouvrez à nouveau la page de connexio
 En production, chaque nouveau compte doit être validé par un **code à 6 chiffres** envoyé sur l'adresse e-mail fournie. Après l'inscription, vous êtes conduit sur `/verify` : saisissez le code reçu dans les 15 minutes (5 essais maximum). La validation connecte automatiquement le compte et ouvre l'accueil. Le bouton **Renvoyer le code** génère un nouveau code (au plus une fois par minute).
 
 Le code n'est jamais stocké en clair ni affiché une seconde fois. Si aucun serveur SMTP n'est configuré (développement local), l'application affiche le code une seule fois dans un avertissement et le consigne dans le log serveur : l'inscription reste possible. Les comptes créés avant l'activation de cette fonction restent valides. Une seconde inscription avec le même e-mail reprend la vérification en cours au lieu de créer un nouveau compte.
+
+### 8.5 bis Mot de passe oublié
+
+Depuis `/login`, cliquez sur **Mot de passe oublié ?** (ou ouvrez directement `/password/reset`). Saisissez l'adresse e-mail du compte : un code à 6 chiffres valable 15 minutes est envoyé (5 essais maximum, renvoi possible toutes les 60 secondes). Saisissez ce code ainsi que votre nouveau mot de passe (8 caractères minimum, confirmation requise), puis connectez-vous avec ce dernier. Vos projets et vos accès restent attachés au **même compte** : aucun doublon n'est créé. Le code est stocké uniquement sous forme de hash HMAC et les données temporaires sont supprimées après succès. Si le serveur n'a pas de SMTP configuré, le code est affiché une seule fois en développement, comme pour l'inscription.
 
 ### 8.6 Visualisations avancées
 

@@ -1,22 +1,26 @@
 """Vérifie que la persistance est bien SQL et que le moteur est configurable.
 
-L'application n'utilise aucun fichier JSON, pickle ou stockage proprietary
+L'application n'utilise aucun fichier JSON, pickle ou stockage propriétaire
 pour ses données métier : comptes, projets, tâches, dépendances, accès,
-scénarios, audits et alertes sont des tables SQLAlchemy. Ce module vérifie
-également que ``DATABASE_URL`` accepte SQLite, PostgreSQL et MySQL/MariaDB.
+scénarios, audits, alertes et clé RSA sont des tables SQLAlchemy. Ce module
+vérifie également que ``DATABASE_URL`` accepte SQLite, PostgreSQL et
+MySQL/MariaDB.
 """
 
 import os
+import tempfile
 import unittest
 from unittest.mock import patch
 
+from flask import Flask
 from sqlalchemy import create_engine, inspect
 
 import config
+import crypto_rsa
 from config import Config, ProductionConfig, TestConfig, _normaliser_uri_sql
 from extensions import db
 from models import (
-    AlerteRisque, AuditLog, Dependency, Project, ProjectAccess,
+    AlerteRisque, AuditLog, ClefCrypto, Dependency, Project, ProjectAccess,
     Scenario, Task, User,
 )
 
@@ -88,9 +92,9 @@ class SqlBackendTestCase(unittest.TestCase):
     def test_tous_les_modeles_metier_sont_des_tables_sql(self):
         modeles = (
             User, Project, Task, Dependency, ProjectAccess,
-            Scenario, AuditLog, AlerteRisque,
+            Scenario, AuditLog, AlerteRisque, ClefCrypto,
         )
-        self.assertEqual(8, len(modeles))
+        self.assertEqual(9, len(modeles))
         for modele in modeles:
             with self.subTest(modele=modele.__name__):
                 self.assertTrue(issubclass(modele, db.Model))
@@ -105,9 +109,31 @@ class SqlBackendTestCase(unittest.TestCase):
         finally:
             moteur.dispose()
         self.assertEqual({
-            'alerte_risque', 'audit_log', 'dependency', 'project',
-            'project_access', 'scenario', 'task', 'user',
+            'alerte_risque', 'audit_log', 'clef_crypto', 'dependency',
+            'project', 'project_access', 'scenario', 'task', 'user',
         }, tables)
+
+    def test_cle_rsa_survit_a_un_redemarrage(self):
+        """Une nouvelle instance lit la clé en SQL : les mots de passe restent valides."""
+        with tempfile.TemporaryDirectory() as dossier:
+            uri = 'sqlite:///' + os.path.join(dossier, 'cle.db')
+            clefs = []
+            for _ in range(2):
+                application = Flask(__name__)
+                application.config.update(
+                    SQLALCHEMY_DATABASE_URI=uri,
+                    SQLALCHEMY_TRACK_MODIFICATIONS=False,
+                    SECRET_KEY='test-cle',
+                )
+                db.init_app(application)
+                with application.app_context():
+                    db.create_all()
+                crypto_rsa.initialiser(application)
+                clefs.append(crypto_rsa.cle_publique_pem())
+                with application.app_context():
+                    db.session.remove()
+                    db.engine.dispose()
+            self.assertEqual(clefs[0], clefs[1])
 
 
 if __name__ == '__main__':

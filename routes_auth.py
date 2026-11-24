@@ -402,6 +402,186 @@ def login():
     )
 
 
+def _preparer_code_reset(user):
+    """Prépare un code de réinitialisation en réutilisant le stockage HMAC."""
+    code = _generer_code_verification()
+    user.code_verification_hash = _hash_code_verification(user, code)
+    user.code_verification_expire = (
+        _maintenant_utc_naif()
+        + timedelta(minutes=CODE_VERIFICATION_DUREE_MINUTES)
+    )
+    user.tentatives_code = 0
+    db.session.commit()
+    session['reset_email'] = user.email
+    session['reset_dernier_envoi'] = time.time()
+
+    envoye = False
+    if service_mail.smtp_configure():
+        envoye = service_mail.envoyer_code(user.email, code, user.username)
+    if envoye:
+        flash("Un code de réinitialisation vient de vous être envoyé.", 'success')
+    else:
+        flash(
+            "SMTP non configuré (mode développement) : votre code est "
+            f"{code}. Il n'a pas été envoyé par e-mail — ne le partagez pas.",
+            'warning'
+        )
+        current_app.logger.warning(
+            "Code de réinitialisation (développement, SMTP absent) pour %s : %s",
+            user.email, code,
+        )
+
+
+@auth_bp.route('/password/reset', methods=['GET', 'POST'])
+def reset_password():
+    """Réinitialise un mot de passe oublié avec un code HMAC à 6 chiffres."""
+    etape = 'code' if session.get('reset_email') else 'email'
+
+    if request.method == 'POST':
+        if etape == 'email':
+            email = (request.form.get('email') or '').strip()
+            user = _utilisateur_par_email(email)
+            dernier = float(session.get('reset_dernier_envoi') or 0)
+            if time.time() - dernier < CODE_VERIFICATION_DELAI_RENVOI:
+                flash(
+                    "Un code vient d'être demandé. Attendez une minute avant "
+                    "d'en demander un nouveau.",
+                    'warning'
+                )
+            elif user is None:
+                # Message volontairement générique : ne révèle pas le compte.
+                flash(
+                    "Si cette adresse est enregistrée, un code vient de vous "
+                    "être envoyé.",
+                    'info'
+                )
+            else:
+                try:
+                    _preparer_code_reset(user)
+                except Exception:
+                    db.session.rollback()
+                    flash(
+                        "Impossible de préparer la réinitialisation. "
+                        "Veuillez réessayer.",
+                        'error'
+                    )
+                else:
+                    return redirect(url_for('auth.reset_password'))
+        else:
+            email = session.get('reset_email')
+            user = _utilisateur_par_email(email)
+            code = (request.form.get('code') or '').strip()
+            mot_de_passe = (
+                _mot_de_passe_depuis_formulaire(
+                    'password', 'password_chiffre'
+                ) or ''
+            )
+            confirmation = (
+                _mot_de_passe_depuis_formulaire(
+                    'password_confirm', 'password_chiffre_confirm'
+                ) or ''
+            )
+            if user is None:
+                session.pop('reset_email', None)
+                flash("Session de réinitialisation expirée.", 'error')
+            elif (
+                user.code_verification_expire
+                and _maintenant_utc_naif() >= user.code_verification_expire
+            ):
+                user.code_verification_hash = None
+                user.code_verification_expire = None
+                user.tentatives_code = 0
+                db.session.commit()
+                flash("Ce code a expiré. Demandez-en un nouveau.", 'error')
+            elif not user.code_verification_hash:
+                flash("Aucun code valide n'est en attente. Demandez-en un nouveau.", 'error')
+            elif not code or not _code_verification_correspond(user, code):
+                user.tentatives_code = (user.tentatives_code or 0) + 1
+                if user.tentatives_code >= CODE_VERIFICATION_TENTATIVES_MAX:
+                    user.code_verification_hash = None
+                    user.code_verification_expire = None
+                db.session.commit()
+                restant = max(0, CODE_VERIFICATION_TENTATIVES_MAX - user.tentatives_code)
+                if restant == 0:
+                    flash("Trop de tentatives. Demandez un nouveau code.", 'error')
+                else:
+                    flash(f"Code incorrect. {restant} tentative(s) restante(s).", 'error')
+            elif len(mot_de_passe) < LONGUEUR_MIN_MOT_DE_PASSE:
+                flash(
+                    f"Le mot de passe doit contenir au moins "
+                    f"{LONGUEUR_MIN_MOT_DE_PASSE} caractères.",
+                    'error'
+                )
+            elif mot_de_passe != confirmation:
+                flash("Les mots de passe ne correspondent pas.", 'error')
+            else:
+                user.set_password(mot_de_passe)
+                user.code_verification_hash = None
+                user.code_verification_expire = None
+                user.tentatives_code = 0
+                db.session.commit()
+                session.pop('reset_email', None)
+                session.pop('reset_dernier_envoi', None)
+                flash(
+                    "Mot de passe réinitialisé. Vous pouvez vous connecter.",
+                    'success'
+                )
+                return redirect(url_for('auth.login'))
+
+    restant = CODE_VERIFICATION_TENTATIVES_MAX
+    if etape == 'code':
+        utilisateur = _utilisateur_par_email(session.get('reset_email'))
+        if utilisateur is not None:
+            restant = max(
+                0, CODE_VERIFICATION_TENTATIVES_MAX - (utilisateur.tentatives_code or 0)
+            )
+    return _rendre(
+        'auth/reset_password.html',
+        etape=etape,
+        email=session.get('reset_email', ''),
+        tentatives_restantes=restant,
+        delai_renvoi=CODE_VERIFICATION_DELAI_RENVOI,
+    )
+
+
+@auth_bp.route('/password/reset/renvoyer', methods=['POST'])
+def renvoyer_code_reset():
+    """Régénère le code de réinitialisation, au plus une fois par minute."""
+    email = session.get('reset_email')
+    if not email:
+        flash("Aucune réinitialisation n'est en cours.", 'error')
+        return redirect(url_for('auth.reset_password'))
+
+    dernier_envoi = session.get('reset_dernier_envoi')
+    if dernier_envoi is not None:
+        try:
+            ecart = time.time() - float(dernier_envoi)
+        except (TypeError, ValueError):
+            ecart = CODE_VERIFICATION_DELAI_RENVOI
+        if ecart < CODE_VERIFICATION_DELAI_RENVOI:
+            restant = int(CODE_VERIFICATION_DELAI_RENVOI - ecart) + 1
+            flash(
+                f"Veuillez patienter {restant} secondes avant de demander "
+                "un nouveau code.",
+                'error'
+            )
+            return redirect(url_for('auth.reset_password'))
+
+    user = _utilisateur_par_email(email)
+    if user is None:
+        session.pop('reset_email', None)
+        session.pop('reset_dernier_envoi', None)
+        flash("Compte introuvable. Veuillez recommencer.", 'error')
+        return redirect(url_for('auth.reset_password'))
+
+    try:
+        _preparer_code_reset(user)
+    except Exception:
+        db.session.rollback()
+        flash("Impossible de renvoyer le code. Veuillez réessayer.", 'error')
+    return redirect(url_for('auth.reset_password'))
+
+
 @auth_bp.route('/verify', methods=['GET', 'POST'])
 def verify():
     """Validation du code de vérification envoyé par e-mail (AUTH-05)."""
