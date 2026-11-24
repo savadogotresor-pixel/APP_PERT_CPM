@@ -4,12 +4,33 @@ import os
 from datetime import timedelta
 
 
-def _database_uri():
-    """URI SQLAlchemy, avec normalisation du préfixe PostgreSQL de Render."""
-    uri = os.environ.get('DATABASE_URL', 'sqlite:///pert_cpm.db')
-    if uri.startswith('postgres://'):
-        uri = 'postgresql://' + uri[len('postgres://'):]
+def _normaliser_uri_sql(uri):
+    """Normalise les alias d'URI des moteurs SQL acceptés.
+
+    SQLite reste le réglage local par défaut. PostgreSQL est le moteur de
+    production (Render fournit souvent ``postgres://``, alias historique que
+    SQLAlchemy 2 n'accepte plus). MySQL/MariaDB sont également supportés via
+    le pilote ``pymysql`` : les alias ``mysql://`` et ``mariadb://`` sont
+    convertis en ``mysql+pymysql://``. Toute autre URI SQLAlchemy valide est
+    laissée telle quelle (par exemple ``postgresql+psycopg://``).
+    """
+    uri = (uri or '').strip()
+    alias = {
+        'postgres://': 'postgresql://',
+        'mysql://': 'mysql+pymysql://',
+        'mariadb://': 'mysql+pymysql://',
+    }
+    for prefixe, remplacement in alias.items():
+        if uri.startswith(prefixe):
+            return remplacement + uri[len(prefixe):]
     return uri
+
+
+def _database_uri():
+    """URI SQLAlchemy effective, lue dans ``DATABASE_URL``."""
+    return _normaliser_uri_sql(
+        os.environ.get('DATABASE_URL', 'sqlite:///pert_cpm.db')
+    )
 
 
 class Config:
@@ -70,9 +91,9 @@ class _SecretProduction:
     manque, sans toucher à Config/TestConfig.
     """
 
-    def __init__(self, variable, normaliser_postgres=False):
+    def __init__(self, variable, normaliser_sql=False):
         self.variable = variable
-        self.normaliser_postgres = normaliser_postgres
+        self.normaliser_sql = normaliser_sql
 
     def __get__(self, instance, owner):
         valeur = os.environ.get(self.variable)
@@ -81,8 +102,8 @@ class _SecretProduction:
                 f"ProductionConfig exige la variable d'environnement "
                 f"{self.variable} (à définir dans Render avant le démarrage)."
             )
-        if self.normaliser_postgres and valeur.startswith('postgres://'):
-            valeur = 'postgresql://' + valeur[len('postgres://'):]
+        if self.normaliser_sql:
+            valeur = _normaliser_uri_sql(valeur)
         return valeur
 
 
@@ -90,7 +111,7 @@ class ProductionConfig(Config):
     """Configuration de production : secrets obligatoires et cookies sûrs."""
 
     SECRET_KEY = _SecretProduction('SECRET_KEY')
-    SQLALCHEMY_DATABASE_URI = _SecretProduction('DATABASE_URL', normaliser_postgres=True)
+    SQLALCHEMY_DATABASE_URI = _SecretProduction('DATABASE_URL', normaliser_sql=True)
     DEBUG = False
     TESTING = False
     SESSION_COOKIE_SECURE = True

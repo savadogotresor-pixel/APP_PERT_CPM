@@ -53,11 +53,11 @@ Lecture du schéma :
 | Fichier / dossier | Responsabilité |
 |---|---|
 | `app.py` | Fabrique l'application Flask, charge la configuration, initialise les extensions, enregistre les blueprints, définit `ProxyFix`, les en-têtes de sécurité, la journalisation stdout, les routes historiques et les gestionnaires d'erreurs (413, 404, 500, exceptions non prévues). |
-| `config.py` | `Config` (développement), `ProductionConfig` (secrets obligatoires, cookies sûrs), `TestConfig` (SQLite mémoire, CSRF désactivé). Normalise `postgres://` en `postgresql://`. |
+| `config.py` | `Config` (développement), `ProductionConfig` (secrets obligatoires, cookies sûrs), `TestConfig` (SQLite mémoire, CSRF désactivé). `DATABASE_URL` permet de choisir le moteur SQL : SQLite par défaut, PostgreSQL (`postgres://` normalisé en `postgresql://`) et MySQL/MariaDB (`mysql://`/`mariadb://` normalisés en `mysql+pymysql://`). |
 | `extensions.py` | Instances partagées `db` (SQLAlchemy), `login_manager` (Flask-Login), `csrf` (Flask-WTF). |
 | `models.py` | Entités `User`, `Project`, `Task`, `Dependency`, `ProjectAccess`, `Scenario`, `AuditLog`, `AlerteRisque` ; hachage des mots de passe ; `project_to_taches()` ; `user_can_access()` ; `init_db()` (`db.create_all()` + migration idempotente de la vérification e-mail). |
-| `sql/schema.sql` | Schéma SQL SQLite généré depuis `models.py` (8 tables, index et contraintes). Référence de la structure ; la production utilise le même schéma via PostgreSQL et `DATABASE_URL`. |
-| `scripts/init_db.py` | Crée/migre la base de façon idempotente en respectant `APP_SETTINGS` et `DATABASE_URL`, puis affiche le chemin et le nombre de lignes par table. |
+| `sql/schema.sql` | Schéma SQL généré depuis `models.py` (8 tables, index et contraintes). Référence de la structure ; `db.create_all()` applique le même modèle au moteur SQL choisi via `DATABASE_URL`. |
+| `scripts/init_db.py` | Crée/migre la base de façon idempotente en respectant `APP_SETTINGS` et `DATABASE_URL`, puis affiche le moteur SQL, le chemin et le nombre de lignes par table. |
 | `routes_auth.py` | Blueprint `auth` : inscription, connexion, déconnexion, profil, endpoint public `/auth/public-key` ; validation serveur, messages génériques, filtrage de `next` contre les redirections ouvertes, lecture des mots de passe chiffrés ou en clair. L'e-mail est l'identifiant unique : `username` est facultatif et généré depuis l'e-mail ; un e-mail existant redirige vers la connexion ou la vérification sans créer de doublon. |
 | `crypto_rsa.py` | Chiffrement des identifiants : initialisation idempotente de la clé (variable d'environnement ou clé générée en mémoire), PEM SPKI public, déchiffrement RSA-OAEP-SHA256. La clé privée n'est ni exposée ni journalisée. |
 | `routes_projects.py` | Blueprint `projects` (préfixe `/projects`) : CRUD projets/tâches, archivage, import/export, rapport PDF, scénarios d'optimisation, journalisation des actions. |
@@ -166,7 +166,7 @@ Relations fonctionnelles :
 |---|---|---|
 | `SECRET_KEY` | `dev-secret-key-a-changer` avec `Config` | Signature des sessions et des jetons CSRF. `ProductionConfig` **exige** la variable et refuse de démarrer si elle manque. |
 | `RSA_PRIVATE_KEY_PEM` | non défini | Clé privée RSA 2048 bits au format PEM utilisée pour déchiffrer les mots de passe. Sans variable, `crypto_rsa.initialiser(app)` génère une clé en mémoire : elle est perdue au redémarrage. À définir en production pour conserver la clé. |
-| `DATABASE_URL` | `sqlite:///pert_cpm.db` | URI SQLAlchemy. Le préfixe `postgres://` fourni par Render est normalisé en `postgresql://`. `TestConfig` force `sqlite:///:memory:`. |
+| `DATABASE_URL` | `sqlite:///pert_cpm.db` | URI SQLAlchemy : choisit le moteur SQL. SQLite par défaut ; `postgres://` est normalisé en `postgresql://` (Render) ; `mysql://` et `mariadb://` sont normalisés en `mysql+pymysql://` (pilote fourni dans `requirements.txt`). `TestConfig` force `sqlite:///:memory:`. Voir `.env.example`. |
 | `APP_SETTINGS` | `config.Config` | Classe de configuration Python : `config.Config`, `config.ProductionConfig` (recommandé en prod) ou `config.TestConfig`. |
 | `FLASK_DEBUG` | non défini | `1` active le debug et le niveau de journal `DEBUG` en **développement uniquement** ; jamais en production. |
 | `PORT` | — | Fourni par Render ; utilisé par la commande de démarrage gunicorn (`--bind 0.0.0.0:$PORT`). |
@@ -291,7 +291,7 @@ python app.py
 APP_SETTINGS=config.Config FLASK_DEBUG=1 python app.py
 ```
 
-Ouvrir <http://127.0.0.1:5000>. Par défaut, la base est `instance/pert_cpm.db` (Flask-SQLAlchemy place les URI SQLite relatives dans le dossier `instance/`). Pour créer ou migrer explicitement cette base sans lancer le serveur : `python scripts/init_db.py`. Le schéma de référence est `sql/schema.sql`. Pour utiliser la configuration de production en local, définir **obligatoirement** `SECRET_KEY` et `DATABASE_URL` puis `APP_SETTINGS=config.ProductionConfig`.
+Ouvrir <http://127.0.0.1:5000>. Par défaut, la base est `instance/pert_cpm.db` (Flask-SQLAlchemy place les URI SQLite relatives dans le dossier `instance/`). Pour créer ou migrer explicitement cette base sans lancer le serveur : `python scripts/init_db.py` (il affiche le moteur SQL utilisé). Le schéma de référence est `sql/schema.sql`. Pour utiliser un autre moteur SQL, définir `DATABASE_URL` avant le démarrage ; les exemples sont regroupés dans `.env.example` (à copier vers `.env`, jamais committer). Pour utiliser la configuration de production en local, définir **obligatoirement** `SECRET_KEY` et `DATABASE_URL` puis `APP_SETTINGS=config.ProductionConfig`. `tests/test_sql_backend.py` vérifie la normalisation des URI et la création des 8 tables SQL.
 
 Serveur WSGI (production) : `gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120`.
 

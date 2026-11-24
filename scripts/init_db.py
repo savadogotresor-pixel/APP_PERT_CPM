@@ -38,6 +38,7 @@ def main():
 
     with application.app_context():
         print('Chemin de la base :', db.engine.url)
+        print('Moteur SQL :', db.engine.dialect.name)
         inspecteur = inspect(db.engine)
         tables = sorted(inspecteur.get_table_names())
         print('Base SQL prête :', application.config['SQLALCHEMY_DATABASE_URI'])
